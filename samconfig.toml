@@ -1,0 +1,10 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "amazon-forecast-sample"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-1c1q1s5zmzeqt"
+s3_prefix = "amazon-forecast-sample"
+region = "ap-northeast-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
