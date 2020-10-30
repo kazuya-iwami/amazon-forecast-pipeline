@@ -1,76 +1,887 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  amazon-forecast-sample
+Description: "Automated Forecast Infrastructure CloudFormation Template (Python)"
 
-  Sample SAM Template for amazon-forecast-sample
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    AutoPublishAlias: live # See https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/automating-updates-to-serverless-apps.html
+    DeploymentPreference:
+      Type: AllAtOnce
+    MemorySize: 1024
+    Runtime: python3.8
+    Timeout: 180
+    ReservedConcurrentExecutions: 2 # There can be two state machines executing the same function at the same time
+
+# Define some constants which can be used across entire cloudformation stack
+Mappings:
+  Constants:
+    StateMachine:
+      ForecastExportCronStateMachineName: "ForecastExportCronStateMachine"
+      ModelGenerationStateMachineName: "ModelGenerationStateMachine"
+    Lambda:
+      ForecastHorizonInDays: 3
+    S3:
+      SrcS3Folder: "source"
+      TgtS3Folder: "target"
+      TrainingDataFileName: "historical_demand.csv"
+
+Parameters:
+  # Since s3 bucket name has to been unique across all accounts all regions, so please specify your own bucket name
+  PredictionS3BucketName:
+    Type: String
 
 Resources:
-  StockTradingStateMachine:
-    Type: AWS::Serverless::StateMachine # More info about State Machine Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-statemachine.html
+  # Shared Infrastructures
+  ## S3 Buckets: holding training data and prediction result
+  PredictionS3Bucket:
+    Type: AWS::S3::Bucket
     Properties:
-      DefinitionUri: statemachine/stock_trader.asl.json
-      DefinitionSubstitutions:
-        StockCheckerFunctionArn: !GetAtt StockCheckerFunction.Arn
-        StockSellerFunctionArn: !GetAtt StockSellerFunction.Arn
-        StockBuyerFunctionArn: !GetAtt StockBuyerFunction.Arn
-        DDBPutItem: !Sub arn:${AWS::Partition}:states:::dynamodb:putItem
-        DDBTable: !Ref TransactionTable
+      BucketName:
+        Ref: PredictionS3BucketName
+      MetricsConfigurations:
+        - Id:
+            Fn::Join:
+              - ""
+              - - Fn::FindInMap: [Constants, S3, SrcS3Folder]
+                - "MetricsConfig"
+          Prefix:
+            Fn::FindInMap: [Constants, S3, SrcS3Folder]
+        - Id:
+            Fn::Join:
+              - ""
+              - - Fn::FindInMap: [Constants, S3, TgtS3Folder]
+                - "MetricsConfig"
+          Prefix:
+            Fn::FindInMap: [Constants, S3, TgtS3Folder]
+
+  # Demand Publishing Component Infrastructures
+  ## Lambda Function triggered by Cloudwatch Event Rule periodically
+  PublishDemand:
+    Type: AWS::Serverless::Function
+    DependsOn: PredictionS3Bucket
+    Properties:
+      Description: "Publish historical demand file to S3 bucket"
+      CodeUri: functions/publish_demand/
+      Handler: app.lambda_handler
+      Environment:
+        Variables:
+          PREDICTION_S3_BUCKET_NAME:
+            Ref: PredictionS3BucketName
+          SRC_S3_FOLDER:
+            Fn::FindInMap: [Constants, S3, SrcS3Folder]
+          S3_TRAINING_DATA_FILE_NAME:
+            Fn::FindInMap: [Constants, S3, TrainingDataFileName]
       Events:
-        HourlyTradingSchedule:
-          Type: Schedule # More info about Schedule Event Source: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-property-statemachine-schedule.html
+        CloudwatchScheduledEvent:
+          Type: Schedule
           Properties:
-            Description: Schedule to run the stock trading state machine every hour
-            Enabled: False # This schedule is disabled by default to avoid incurring charges.
-            Schedule: "rate(1 hour)"
-      Policies: # Find out more about SAM policy templates: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-policy-templates.html
-        - LambdaInvokePolicy:
-            FunctionName: !Ref StockCheckerFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref StockSellerFunction
-        - LambdaInvokePolicy:
-            FunctionName: !Ref StockBuyerFunction
-        - DynamoDBWritePolicy:
-            TableName: !Ref TransactionTable
+            Schedule: "rate(2 hours)"
+      Policies:
+        - Id: "PublishHistoricalDemandToSrcS3Folder"
+          Statement:
+            - Action:
+                - "s3:GetObject"
+                - "s3:DeleteObject"
+                - "s3:PutObject"
+              Effect: Allow
+              Resource:
+                Fn::Join:
+                  - ""
+                  - - "arn:"
+                    - Ref: AWS::Partition
+                    - ":s3:::"
+                    - Ref: PredictionS3BucketName
+                    - "/"
+                    - Fn::FindInMap: [Constants, S3, SrcS3Folder]
+                    - "/*"
+            - Action:
+                - "s3:ListBucket"
+              Effect: Allow
+              Resource:
+                Fn::Join:
+                  - ""
+                  - - "arn:"
+                    - Ref: AWS::Partition
+                    - ":s3:::"
+                    - Ref: PredictionS3BucketName
 
-  StockCheckerFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html
+  # Prediction Generation Component Infrastructures
+  ## IAM Role: associated with lambda functions to allow them to call Forecast API and access S3 bucket
+  PredictionSrcS3PullerIAMRole:
+    Type: AWS::IAM::Role
     Properties:
-      CodeUri: functions/stock_checker/
-      Handler: app.lambda_handler
-      Runtime: python3.8
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "forecast.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      Policies:
+        - PolicyName: "PullTrainingDataFromSrcS3Folder"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action: "s3:GetObject"
+                Effect: "Allow"
+                Resource:
+                  Fn::Join:
+                    - ""
+                    - - Fn::GetAtt: [PredictionS3Bucket, Arn]
+                      - "/"
+                      - Fn::FindInMap: [Constants, S3, SrcS3Folder]
+                      - "/*"
+  PredictionTgtS3PublisherIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "forecast.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      Policies:
+        - PolicyName: "PublishPredictionResultToTgtS3Folder"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # For Forecast use, when it publishes new predictions, it also deletes the existing predictions
+              - Action:
+                  - "s3:PutObject"
+                  - "s3:DeleteObject"
+                Effect: "Allow"
+                Resource:
+                  Fn::Join:
+                    - ""
+                    - - Fn::GetAtt: [PredictionS3Bucket, Arn]
+                      - "/"
+                      - Fn::FindInMap: [Constants, S3, TgtS3Folder]
+                      - "/*"
+  PredictionGenerationLambdaHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+        - "arn:aws:iam::aws:policy/AmazonForecastFullAccess"
+      Policies:
+        - PolicyName: "PassRequiredRolesToForecastService"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "iam:GetRole"
+                  - "iam:PassRole"
+                Resource:
+                  - Fn::GetAtt: [PredictionSrcS3PullerIAMRole, Arn]
+                  - Fn::GetAtt: [PredictionTgtS3PublisherIAMRole, Arn]
+        - PolicyName: "GetHistoricalDemandFileFromSrcS3Folder"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "s3:GetObject"
+                Resource:
+                  Fn::Join:
+                    - ""
+                    - - "arn:"
+                      - Ref: AWS::Partition
+                      - ":s3:::"
+                      - Ref: PredictionS3BucketName
+                      - "/"
+                      - Fn::FindInMap: [Constants, S3, SrcS3Folder]
+                      - "/*"
 
-  StockSellerFunction:
+  ## Lambda functions
+  CreateDataset:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/stock_seller/
+      Description: "Create an Amazon Forecast dataset. The information about the dataset that you provide helps AWS Forecast understand how to consume the data for model training."
+      CodeUri: functions/create_dataset/
       Handler: app.lambda_handler
-      Runtime: python3.8
-
-  StockBuyerFunction:
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  CreateDatasetGroup:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/stock_buyer/
+      Description: "Create an Amazon Forecast dataset group which can contain one or multiple dataset(s)."
+      CodeUri: functions/create_dataset_group/
       Handler: app.lambda_handler
-      Runtime: python3.8
-
-  TransactionTable:
-    Type: AWS::Serverless::SimpleTable # More info about SimpleTable Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-simpletable.html
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  CreateDatasetImportJob:
+    Type: AWS::Serverless::Function
     Properties:
-      PrimaryKey:
-        Name: Id
-        Type: String
-      ProvisionedThroughput:
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
+      Description: "Uploads your training data to an Amazon Forecast dataset."
+      Environment:
+        Variables:
+          FORECAST_IMPORT_TRAINING_DATA_ROLE_ARN:
+            Fn::GetAtt: [PredictionSrcS3PullerIAMRole, Arn]
+          PREDICTION_S3_BUCKET_NAME:
+            Ref: PredictionS3BucketName
+          SRC_S3_FOLDER:
+            Fn::FindInMap: [Constants, S3, SrcS3Folder]
+          S3_TRAINING_DATA_FILE_NAME:
+            Fn::FindInMap: [Constants, S3, TrainingDataFileName]
+      CodeUri: functions/create_dataset_import_job/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  CreateForecast:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Creates a forecast for each item in the dataset that was used to train the predictor."
+      CodeUri: functions/create_foreacast/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  CreateForecastExportJob:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Creates a forecast export job for exporting predicted result to S3 bucket."
+      Environment:
+        Variables:
+          FORECAST_EXPORT_RESULT_ROLE_ARN:
+            Fn::GetAtt:
+              - PredictionTgtS3PublisherIAMRole
+              - Arn
+          PREDICTION_S3_BUCKET_NAME:
+            Ref: PredictionS3BucketName
+          TGT_S3_FOLDER:
+            Fn::FindInMap: [Constants, S3, TgtS3Folder]
+      CodeUri: functions/create_forecast_export_job/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  CreatePredictor:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Creates an Amazon Forecast predictor(ML model)."
+      Environment:
+        Variables:
+          FORECAST_HORIZON_IN_DAYS:
+            Fn::FindInMap: [Constants, Lambda, ForecastHorizonInDays]
+          FORECAST_PREDICTOR_ALGORITHM_ARN: ""
+      CodeUri: functions/create_predictor/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  DeleteOutdatedDatasetGroups:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Deletes outdated dataset groups."
+      CodeUri: functions/delete_outdated_dataset_groups/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  DeleteOutdatedDatasetImportJobs:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Delete outdated datasetImportJobs."
+      CodeUri: functions/delete_outdated_dataset_import_jobs/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  DeleteOutdatedDatasets:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Deletes outdated datasets."
+      CodeUri: functions/delete_outdated_datasets/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  DeleteOutdatedForecastExportJobs:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Delete outdated forecastExportJobs."
+      CodeUri: functions/delete_outdated_foreast_export_jobs/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  DeleteOutdatedForecasts:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Delete outdated forecasts."
+      CodeUri: functions/delete_outdated_forecasts/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  DeleteOutdatedPredictors:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Delete outdated predictors."
+      CodeUri: functions/delete_outdated_predictors/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  GenerateForecastResourcesIdentifiers:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Create the new identifiers for new set of forecase resources including, Dataset name, DatasetGroup name, etc.."
+      CodeUri: functions/generate_forecast_resources_identifiers/
+      Handler: app.lambda_handler
+      Environment:
+        Variables:
+          PREDICTION_S3_BUCKET_NAME:
+            Ref: PredictionS3BucketName
+          SRC_S3_FOLDER:
+            Fn::FindInMap: [Constants, S3, SrcS3Folder]
+          S3_TRAINING_DATA_FILE_NAME:
+            Fn::FindInMap: [Constants, S3, TrainingDataFileName]
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
+  GenerateForecastResourcesIdentifiersCron:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Create the new identifiers cron for new set of forecase resources"
+      CodeUri: functions/generate_forecast_resources_identifiers_cron/
+      Handler: app.lambda_handler
+      Role:
+        Fn::GetAtt: [PredictionGenerationLambdaHandlerRole, Arn]
 
-Outputs:
-  # StockTradingStateMachineHourlyTradingSchedule is an implicit Schedule event rule created out of Events key under Serverless::StateMachine
-  # Find out more about other implicit resources you can reference within SAM
-  # https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-generated-resources.html
-  StockTradingStateMachineArn:
-    Description: "Stock Trading State machine ARN"
-    Value: !Ref StockTradingStateMachine
-  StockTradingStateMachineRoleArn:
-    Description: "IAM Role created for Stock Trading State machine based on the specified SAM Policy Templates"
-    Value: !GetAtt StockTradingStateMachineRole.Arn
+  ## StateMachine(AWS Step functions): For orchestrating multiple Lambda functions to generate the Forecast predictor(ML model)
+  ModelGenerationStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName:
+        Fn::FindInMap:
+          [Constants, StateMachine, ModelGenerationStateMachineName]
+      RoleArn:
+        Fn::GetAtt: [ModelGenerationStateMachineIAMRole, Arn]
+      DefinitionString:
+        Fn::Sub:
+          - |-
+            {
+              "Comment": "The workflow for creating and updating the Forecast Prediction Model",
+              "StartAt": "GenerateNewForecastResourcesIdentifiers",
+              "States": {
+                "GenerateNewForecastResourcesIdentifiers": {
+                  "Type": "Task",
+                  "Resource": "${GenerateForecastResourcesIdentifiersArn}",
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 5,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "CreateNewDataset"
+                },
+                "CreateNewDataset": {
+                  "Type": "Task",
+                  "Resource": "${CreateDatasetArn}",
+                  "Catch": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "Next": "Failure"
+                  }],
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 5,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "CreateNewDatasetGroup"
+                },
+                "CreateNewDatasetGroup": {
+                  "Type": "Task",
+                  "Resource": "${CreateDatasetGroupArn}",
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 5,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "CreateNewDatasetImportJob"
+                },
+                "CreateNewDatasetImportJob": {
+                  "Type": "Task",
+                  "Resource": "${CreateDatasetImportJobArn}",
+                  "Catch": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "Next": "Failure"
+                  }],
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 20,
+                    "MaxAttempts": 20,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "CreateNewPredictor"
+                },
+                "CreateNewPredictor": {
+                  "Type": "Task",
+                  "Resource": "${CreatePredictorArn}",
+                  "Catch": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "Next": "Failure"
+                  }],
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 20,
+                    "MaxAttempts": 50,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "CreateNewForecast"
+                },
+                "CreateNewForecast": {
+                  "Type": "Task",
+                  "Resource": "${CreateForecastArn}",
+                  "Catch": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "Next": "Failure"
+                  }],
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 20,
+                    "MaxAttempts": 20,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "DeleteOutdatedForecastExportJobs"
+                },
+                "DeleteOutdatedForecastExportJobs": {
+                  "Type": "Task",
+                  "Resource": "${DeleteOutdatedForecastExportJobsArn}",
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "DeleteOutdatedForecasts"
+                },
+                "DeleteOutdatedForecasts": {
+                  "Type": "Task",
+                  "Resource": "${DeleteOutdatedForecastsArn}",
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "DeleteOutdatedPredictors"
+                },
+                "DeleteOutdatedPredictors": {
+                  "Type": "Task",
+                  "Resource": "${DeleteOutdatedPredictorsArn}",
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "DeleteOutdatedDatasetImportJobs"
+                },
+                "DeleteOutdatedDatasetImportJobs": {
+                  "Type": "Task",
+                  "Resource": "${DeleteOutdatedDatasetImportJobsArn}",
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "DeleteOutdatedDatasets"
+                },
+                "DeleteOutdatedDatasets": {
+                  "Type": "Task",
+                  "Resource": "${DeleteOutdatedDatasetsArn}",
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "DeleteOutdatedDatasetGroups"
+                },
+                "DeleteOutdatedDatasetGroups": {
+                  "Type": "Task",
+                  "Resource": "${DeleteOutdatedDatasetGroupsArn}",
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                  }],
+                  "Next": "Done"
+                },
+                "Failure": {
+                  "Type": "Fail"
+                },
+                "Done": {
+                  "Type": "Succeed"
+                }
+              }
+            }
+          - GenerateForecastResourcesIdentifiersArn:
+              Fn::GetAtt: [GenerateForecastResourcesIdentifiers, Arn]
+            CreateDatasetArn:
+              Fn::GetAtt: [CreateDataset, Arn]
+            CreateDatasetGroupArn:
+              Fn::GetAtt: [CreateDatasetGroup, Arn]
+            CreateDatasetImportJobArn:
+              Fn::GetAtt: [CreateDatasetImportJob, Arn]
+            CreatePredictorArn:
+              Fn::GetAtt: [CreatePredictor, Arn]
+            CreateForecastArn:
+              Fn::GetAtt: [CreateForecast, Arn]
+            DeleteOutdatedForecastExportJobsArn:
+              Fn::GetAtt: [DeleteOutdatedForecastExportJobs, Arn]
+            DeleteOutdatedForecastsArn:
+              Fn::GetAtt: [DeleteOutdatedForecasts, Arn]
+            DeleteOutdatedPredictorsArn:
+              Fn::GetAtt: [DeleteOutdatedPredictors, Arn]
+            DeleteOutdatedDatasetImportJobsArn:
+              Fn::GetAtt: [DeleteOutdatedDatasetImportJobs, Arn]
+            DeleteOutdatedDatasetsArn:
+              Fn::GetAtt: [DeleteOutdatedDatasets, Arn]
+            DeleteOutdatedDatasetGroupsArn:
+              Fn::GetAtt: [DeleteOutdatedDatasetGroups, Arn]
+  ## IAM Role used by ModelGenerationStateMachine to trigger Lambda functions
+  ModelGenerationStateMachineIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - Fn::Sub: "states.${AWS::Region}.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: "CallingLambdaFunction"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource:
+                  - Fn::GetAtt: [GenerateForecastResourcesIdentifiers, Arn]
+                  - Fn::GetAtt: [CreateDataset, Arn]
+                  - Fn::GetAtt: [CreateDatasetGroup, Arn]
+                  - Fn::GetAtt: [CreateDatasetImportJob, Arn]
+                  - Fn::GetAtt: [CreatePredictor, Arn]
+                  - Fn::GetAtt: [CreateForecast, Arn]
+                  - Fn::GetAtt: [DeleteOutdatedForecastExportJobs, Arn]
+                  - Fn::GetAtt: [DeleteOutdatedForecasts, Arn]
+                  - Fn::GetAtt: [DeleteOutdatedPredictors, Arn]
+                  - Fn::GetAtt: [DeleteOutdatedDatasetImportJobs, Arn]
+                  - Fn::GetAtt: [DeleteOutdatedDatasets, Arn]
+                  - Fn::GetAtt: [DeleteOutdatedDatasetGroups, Arn]
+  ## Cloudwatch Event Rule to trigger ModelGenerationStateMachine periodically(low frequency)
+  ModelGenerationStateMachineScheduledEventRule:
+    Type: AWS::Events::Rule
+    DependsOn: ModelGenerationStateMachine
+    Properties:
+      Description: "The trigger for workflow to generate or update the ML model."
+      ScheduleExpression: "rate(30 days)"
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::Join:
+              - ":"
+              - - "arn"
+                - Ref: AWS::Partition
+                - "states"
+                - Ref: AWS::Region
+                - Ref: AWS::AccountId
+                - "stateMachine"
+                - Fn::FindInMap:
+                    [Constants, StateMachine, ModelGenerationStateMachineName]
+          Id: "ModelGenerationStateMachineTarget"
+          RoleArn:
+            Fn::GetAtt:
+              - ModelGenerationStateMachineScheduledEventRuleIAMRole
+              - Arn
+  ## IAM Role used by ModelGenerationStateMachineScheduledEventRule to trigger Step Functions
+  ModelGenerationStateMachineScheduledEventRuleIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "events.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: "TriggeringModelGenerationStateMachineExecution"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "states:StartExecution"
+                Resource:
+                  - Fn::Join:
+                      [
+                        ":",
+                        [
+                          "arn",
+                          Ref: AWS::Partition,
+                          "states",
+                          Ref: AWS::Region,
+                          Ref: AWS::AccountId,
+                          "stateMachine",
+                          Fn::FindInMap:
+                            [
+                              Constants,
+                              StateMachine,
+                              ModelGenerationStateMachineName,
+                            ],
+                        ],
+                      ]
+      RoleName: "ModelGenerationStateMachineScheduledEventRuleIAMRole"
+
+  ## StateMachine(AWS Step functions): For orchestrating multiple Lambda functions to generate the prediction result
+  ForecastExportCronStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName:
+        Fn::FindInMap:
+          [Constants, StateMachine, ForecastExportCronStateMachineName]
+      RoleArn:
+        Fn::GetAtt: [ForecastExportCronStateMachineIAMRole, Arn]
+      DefinitionString:
+        Fn::Sub:
+          - |-
+            {
+              "Comment": "The workflow for generating new forecast based on latest predictor",
+              "StartAt": "GenerateNewForecastResourcesIdentifiersCron",
+              "States": {
+                "GenerateNewForecastResourcesIdentifiersCron": {
+                  "Type": "Task",
+                  "Resource": "${GenerateForecastResourcesIdentifiersCronArn}",
+                  "Catch": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "Next": "Failure"
+                  }],
+                  "Next": "DeleteOutdatedForecastExportJobs"
+                },
+                "DeleteOutdatedForecastExportJobs": {
+                 "Type": "Task",
+                 "Resource": "${DeleteOutdatedForecastExportJobsArn}",
+                 "Catch": [{
+                   "ErrorEquals": ["States.TaskFailed"],
+                   "Next": "Failure"
+                 }],
+                 "Retry": [{
+                   "ErrorEquals": ["States.TaskFailed"],
+                   "IntervalSeconds": 20,
+                   "MaxAttempts": 20,
+                   "BackoffRate": 1.5
+                 }],
+                 "Next": "DeleteOutdatedForecasts"
+                },
+                "DeleteOutdatedForecasts": {
+                 "Type": "Task",
+                 "Resource": "${DeleteOutdatedForecastsArn}",
+                 "Catch": [{
+                   "ErrorEquals": ["States.TaskFailed"],
+                   "Next": "Failure"
+                 }],
+                 "Retry": [{
+                   "ErrorEquals": ["States.TaskFailed"],
+                   "IntervalSeconds": 20,
+                   "MaxAttempts": 20,
+                   "BackoffRate": 1.5
+                 }],
+                 "Next": "CreateNewDatasetImportJob"
+                },
+                "CreateNewDatasetImportJob": {
+                  "Type": "Task",
+                  "Resource": "${CreateDatasetImportJobArn}",
+                  "Catch": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "Next": "Failure"
+                  }],
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 20,
+                    "MaxAttempts": 20,
+                    "BackoffRate": 1.5
+                  }],
+                  "Next": "CreateNewForecast"
+                },
+                "CreateNewForecast": {
+                  "Type": "Task",
+                  "Resource": "${CreateForecastArn}",
+                  "Catch": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "Next": "Failure"
+                  }],
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 20,
+                    "MaxAttempts": 20,
+                    "BackoffRate": 1.5
+                  }],
+                  "Next": "CreateNewForecastExportJob"
+                },
+                "CreateNewForecastExportJob": {
+                  "Type": "Task",
+                  "Resource": "${CreateForecastExportJobArn}",
+                  "Catch": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "Next": "Failure"
+                  }],
+                  "Retry": [{
+                    "ErrorEquals": ["States.TaskFailed"],
+                    "IntervalSeconds": 20,
+                    "MaxAttempts": 20,
+                    "BackoffRate": 1.5
+                  }],
+                  "Next": "Done"
+                },
+                "Failure": {
+                  "Type": "Fail"
+                },
+                "Done": {
+                  "Type": "Succeed"
+                }
+              }
+            }
+          - GenerateForecastResourcesIdentifiersCronArn:
+              Fn::GetAtt: [GenerateForecastResourcesIdentifiersCron, Arn]
+            DeleteOutdatedForecastExportJobsArn:
+              Fn::GetAtt: [DeleteOutdatedForecastExportJobs, Arn]
+            DeleteOutdatedForecastsArn:
+              Fn::GetAtt: [DeleteOutdatedForecasts, Arn]
+            CreateDatasetImportJobArn:
+              Fn::GetAtt: [CreateDatasetImportJob, Arn]
+            CreateForecastArn:
+              Fn::GetAtt: [CreateForecast, Arn]
+            CreateForecastExportJobArn:
+              Fn::GetAtt: [CreateForecastExportJob, Arn]
+  ## IAM Role used by ForecastExportCronStateMachine to trigger Lambda functions
+  ForecastExportCronStateMachineIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - Fn::Sub: "states.${AWS::Region}.amazonaws.com"
+      Path: "/"
+      Policies:
+        - PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - lambda:InvokeFunction
+                Effect: Allow
+                Resource:
+                  - Fn::GetAtt:
+                      - GenerateForecastResourcesIdentifiersCron
+                      - Arn
+                  - Fn::GetAtt:
+                      - DeleteOutdatedForecastExportJobs
+                      - Arn
+                  - Fn::GetAtt:
+                      - DeleteOutdatedForecasts
+                      - Arn
+                  - Fn::GetAtt:
+                      - CreateDatasetImportJob
+                      - Arn
+                  - Fn::GetAtt:
+                      - CreateForecast
+                      - Arn
+                  - Fn::GetAtt:
+                      - CreateForecastExportJob
+                      - Arn
+          PolicyName: "CallingLambdaFunction"
+  ## Cloudwatch Event Rule to trigger ForecastExportCronStateMachine periodically(high frequency)
+  ForecastExportCronStateMachineScheduledEventRule:
+    Type: AWS::Events::Rule
+    DependsOn: ForecastExportCronStateMachine
+    Properties:
+      Description: "The trigger for workflow to generate new forecast based latest predictor"
+      ScheduleExpression: "rate(2 hours)"
+      State: ENABLED
+      Targets:
+        - Arn:
+            Fn::Join:
+              - ":"
+              - - "arn"
+                - Ref: AWS::Partition
+                - "states"
+                - Ref: AWS::Region
+                - Ref: AWS::AccountId
+                - "stateMachine"
+                - Fn::FindInMap:
+                    [
+                      Constants,
+                      StateMachine,
+                      ForecastExportCronStateMachineName,
+                    ]
+          Id: "ForecastExportCronStateMachineTarget"
+          RoleArn:
+            Fn::GetAtt:
+              - ForecastExportCronStateMachineScheduledEventRuleIAMRole
+              - Arn
+  ## IAM Role used by ForecastExportCronStateMachineScheduledEventRule to trigger Step Functions
+  ForecastExportCronStateMachineScheduledEventRuleIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: "events.amazonaws.com"
+      Path: "/"
+      Policies:
+        - PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - states:StartExecution
+                Effect: Allow
+                Resource:
+                  - Fn::Join:
+                      - ":"
+                      - - "arn"
+                        - Ref: AWS::Partition
+                        - "states"
+                        - Ref: AWS::Region
+                        - Ref: AWS::AccountId
+                        - "stateMachine"
+                        - Fn::FindInMap:
+                            [
+                              Constants,
+                              StateMachine,
+                              ForecastExportCronStateMachineName,
+                            ]
+          PolicyName: "TriggeringForecastExportCronStateMachineExecution"
