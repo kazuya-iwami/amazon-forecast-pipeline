@@ -1,19 +1,39 @@
+from os import environ
+import actions
+from loader import Loader
+
+ARN = 'arn:aws:forecast:{region}:{account}:predictor/{name}_{date}'
+LOADER = Loader()
+
 
 def lambda_handler(event, context):
-    """Sample Code
+    status = None
+    predictor = event['Predictor']
+    event['PredictorArn'] = ARN.format(
+        account=event['AccountID'],
+        date=event['CurrentDate'],
+        name=predictor['PredictorName'],
+        region=environ['AWS_REGION'],
+    )
+    try:
+        status = LOADER.forecast_cli.describe_predictor(
+            PredictorArn=event['PredictorArn']
+        )
 
-    Parameters
-    ----------
-    event: dict, required
-        Input event to the Lambda function
-
-    context: object, required
-        Lambda Context runtime methods and attributes
-
-    Returns
-    ------
-        dict: sample data
-    """
-    print("Called")
-    sample_data = {"message": "test"}
-    return sample_data
+    except LOADER.forecast_cli.exceptions.ResourceNotFoundException:
+        LOADER.logger.info(
+            'Predictor not found! Will follow to create new predictor.'
+        )
+        if 'InputDataConfig' in predictor.keys():
+            predictor['InputDataConfig']['DatasetGroupArn'] = event[
+                'DatasetGroupArn']
+        else:
+            predictor['InputDataConfig'] = {
+                'DatasetGroupArn': event['DatasetGroupArn']
+            }
+        LOADER.forecast_cli.create_predictor(**predictor)
+        status = LOADER.forecast_cli.describe_predictor(
+            PredictorArn=event["PredictorArn"]
+        )
+    actions.take_action(status['Status'])
+    return event

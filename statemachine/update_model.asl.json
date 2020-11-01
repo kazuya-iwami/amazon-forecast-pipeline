@@ -1,0 +1,239 @@
+{
+    "Comment": "The workflow for creating and updating the Forecast Prediction Model",
+    "StartAt": "CreateNewDataset",
+    "States": {
+        "CreateNewDataset": {
+            "Type": "Task",
+            "Resource": "${CreateDatasetArn}",
+            "Parameters": {
+                "DatasetGroup": {
+                    "DatasetGroupName": "Sample",
+                    "Domain": "CUSTOM"
+                },
+                "Predictor": {
+                    "PredictorName": "SamplePredictor",
+                    "ForecastHorizon": 72,
+                    "FeaturizationConfig": {
+                        "ForecastFrequency": "H"
+                    },
+                    "PerformAutoML": true
+                },
+                "Forecast": {
+                    "ForecastName": "SampleForecast",
+                    "ForecastTypes": [
+                        "0.10",
+                        "0.50",
+                        "0.90"
+                    ]
+                },
+                "TimestampFormat": "yyyy-MM-dd hh:mm:ss",
+                "Datasets": [
+                    {
+                        "DatasetName": "SampleTargetTimeSeries",
+                        "Domain": "CUSTOM",
+                        "DatasetType": "TARGET_TIME_SERIES",
+                        "DataFrequency": "H",
+                        "Schema": {
+                            "Attributes": [
+                                {
+                                    "AttributeName": "timestamp",
+                                    "AttributeType": "timestamp"
+                                },
+                                {
+                                    "AttributeName": "target_value",
+                                    "AttributeType": "float"
+                                },
+                                {
+                                    "AttributeName": "item_id",
+                                    "AttributeType": "string"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            },
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "ResourcePending"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 5,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "CreateNewDatasetGroup"
+        },
+        "CreateNewDatasetGroup": {
+            "Type": "Task",
+            "Resource": "${CreateDatasetGroupArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "ResourcePending"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 5,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "CreateNewDatasetImportJob"
+        },
+        "CreateNewDatasetImportJob": {
+            "Type": "Task",
+            "Resource": "${CreateDatasetImportJobArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "ResourcePending"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 15,
+                    "BackoffRate": 1.5
+                }
+            ],
+            "Next": "CreateNewPredictor"
+        },
+        "CreateNewPredictor": {
+            "Type": "Task",
+            "Resource": "${CreatePredictorArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "ResourcePending"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 25,
+                    "BackoffRate": 1.5
+                }
+            ],
+            "Next": "CreateNewForecast"
+        },
+        "CreateNewForecast": {
+            "Type": "Task",
+            "Resource": "${CreateForecastArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "ResourcePending"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 20,
+                    "BackoffRate": 1.5
+                }
+            ],
+            "Next": "DeleteOutdatedForecastExportJobs"
+        },
+        "DeleteOutdatedForecastExportJobs": {
+            "Type": "Task",
+            "Resource": "${DeleteOutdatedForecastExportJobsArn}",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "States.TaskFailed"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "DeleteOutdatedForecasts"
+        },
+        "DeleteOutdatedForecasts": {
+            "Type": "Task",
+            "Resource": "${DeleteOutdatedForecastsArn}",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "States.TaskFailed"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "DeleteOutdatedPredictors"
+        },
+        "DeleteOutdatedPredictors": {
+            "Type": "Task",
+            "Resource": "${DeleteOutdatedPredictorsArn}",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "States.TaskFailed"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "DeleteOutdatedDatasetImportJobs"
+        },
+        "DeleteOutdatedDatasetImportJobs": {
+            "Type": "Task",
+            "Resource": "${DeleteOutdatedDatasetImportJobsArn}",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "States.TaskFailed"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 10,
+                    "BackoffRate": 2
+                }
+            ],
+            "Next": "Done"
+        },
+        "Failure": {
+            "Type": "Fail"
+        },
+        "Done": {
+            "Type": "Succeed"
+        }
+    }
+}
