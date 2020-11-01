@@ -6,12 +6,11 @@
             "Type": "Task",
             "Resource": "${CreateDatasetArn}",
             "Parameters": {
+                "ProjectName": "ForecastPipeline",
                 "DatasetGroup": {
-                    "DatasetGroupName": "Sample",
                     "Domain": "CUSTOM"
                 },
                 "Predictor": {
-                    "PredictorName": "SamplePredictor",
                     "ForecastHorizon": 72,
                     "FeaturizationConfig": {
                         "ForecastFrequency": "H"
@@ -19,7 +18,6 @@
                     "PerformAutoML": true
                 },
                 "Forecast": {
-                    "ForecastName": "SampleForecast",
                     "ForecastTypes": [
                         "0.10",
                         "0.50",
@@ -29,7 +27,6 @@
                 "TimestampFormat": "yyyy-MM-dd hh:mm:ss",
                 "Datasets": [
                     {
-                        "DatasetName": "SampleTargetTimeSeries",
                         "Domain": "CUSTOM",
                         "DatasetType": "TARGET_TIME_SERIES",
                         "DataFrequency": "H",
@@ -148,6 +145,30 @@
         "CreateNewForecast": {
             "Type": "Task",
             "Resource": "${CreateForecastArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "ResourcePending"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 20,
+                    "BackoffRate": 1.5
+                }
+            ],
+            "Next": "CreateNewForecastExportJob"
+        },
+        "CreateNewForecastExportJob": {
+            "Type": "Task",
+            "Resource": "${CreateForecastExportJobArn}",
             "Catch": [
                 {
                     "ErrorEquals": [

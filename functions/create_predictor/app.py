@@ -3,7 +3,8 @@ import boto3
 import actions
 from loader import Loader
 
-ARN = 'arn:aws:forecast:{region}:{account}:predictor/{name}_{date}'
+PREDICTOR_NAME = '{project_name}_{date}'
+PREDICTOR_ARN = 'arn:aws:forecast:{region}:{account}:predictor/{predictor_name}'
 LOADER = Loader()
 
 cloudwatch_client = boto3.client('cloudwatch')
@@ -51,13 +52,18 @@ def post_metric(metrics):
 
 
 def lambda_handler(event, context):
+    print(event)
     status = None
     predictor = event['Predictor']
-    event['PredictorArn'] = ARN.format(
-        account=event['AccountID'],
-        date=event['CurrentDate'],
-        name=predictor['PredictorName'],
+
+    event['PredictorName'] = PREDICTOR_NAME.format(
+        project_name=environ['ProjectName'],
+        date=event['CurrentDate']
+    )
+    event['PredictorArn'] = PREDICTOR_ARN.format(
         region=environ['AWS_REGION'],
+        account=event['AccountID'],
+        predictor_name=event['PredictorName']
     )
     try:
         status = LOADER.forecast_cli.describe_predictor(
@@ -75,7 +81,10 @@ def lambda_handler(event, context):
             predictor['InputDataConfig'] = {
                 'DatasetGroupArn': event['DatasetGroupArn']
             }
-        LOADER.forecast_cli.create_predictor(**predictor)
+        LOADER.forecast_cli.create_predictor(
+            **predictor,
+            PredictorName=event['PredictorName']
+        )
         status = LOADER.forecast_cli.describe_predictor(
             PredictorArn=event["PredictorArn"]
         )

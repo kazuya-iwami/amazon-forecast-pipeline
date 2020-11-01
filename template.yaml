@@ -210,6 +210,13 @@ Resources:
       Description: "Creates a forecast for each item in the dataset that was used to train the predictor."
       CodeUri: functions/create_foreacast/
       Role: !GetAtt ForecastPipelineRoleForLambda.Arn
+
+  CreateForecastExportJob:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Export a result of forecast into S3 bucket"
+      CodeUri: functions/create_foreacast_export_job/
+      Role: !GetAtt ForecastPipelineRoleForLambda.Arn
       Environment:
         Variables:
           FORECAST_EXPORT_JOB_ROLE_ARN: !GetAtt S3UpdateRoleForForecast.Arn
@@ -264,6 +271,7 @@ Resources:
         CreateDatasetImportJobArn: !GetAtt CreateDatasetImportJob.Arn
         CreatePredictorArn: !GetAtt CreatePredictor.Arn
         CreateForecastArn: !GetAtt CreateForecast.Arn
+        CreateForecastExportJobArn: !GetAtt CreateForecastExportJob.Arn
         DeleteOutdatedForecastExportJobsArn: !GetAtt DeleteOutdatedForecastExportJobs.Arn
         DeleteOutdatedForecastsArn: !GetAtt DeleteOutdatedForecasts.Arn
         DeleteOutdatedPredictorsArn: !GetAtt DeleteOutdatedPredictors.Arn

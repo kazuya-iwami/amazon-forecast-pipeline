@@ -5,21 +5,26 @@ import actions
 from loader import Loader
 
 ACCOUNTID = client('sts').get_caller_identity()['Account']
-ARN = 'arn:aws:forecast:{region}:{account}:dataset/{name}'
+DATASET_NAME = '{project_name}_{dataset_type}'
+DATASET_ARN = 'arn:aws:forecast:{region}:{account}:dataset/{dataset_name}'
 LOADER = Loader()
 
 
 def lambda_handler(event, context):
     print(event)
-    datasets = event['Datasets']
-    status = None
-    event['DatasetArn'] = ARN.format(
-        account=ACCOUNTID,
-        name=datasets[0]['DatasetName'],
-        region=environ['AWS_REGION']
-    )
     event['AccountID'] = ACCOUNTID
     event['CurrentDate'] = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    datasets = event['Datasets']
+    status = None
+    event['DatasetName'] = DATASET_NAME.format(
+        project_name=event['ProjectName'],
+        dataset_type=datasets[0]['DatasetType']
+    )
+    event['DatasetArn'] = DATASET_ARN.format(
+        region=environ['AWS_REGION'],
+        account=event['AccountID'],
+        dataset_name=event['DatasetName']
+    )
     try:
         status = LOADER.forecast_cli.describe_dataset(
             DatasetArn=event['DatasetArn']
@@ -27,7 +32,10 @@ def lambda_handler(event, context):
     except LOADER.forecast_cli.exceptions.ResourceNotFoundException:
         LOADER.logger.info('Dataset not found! Will follow to create dataset.')
         for dataset in datasets:
-            LOADER.forecast_cli.create_dataset(**dataset)
+            LOADER.forecast_cli.create_dataset(
+                **dataset,
+                DatasetName=event['DatasetName']
+            )
         status = LOADER.forecast_cli.describe_dataset(
             DatasetArn=event['DatasetArn']
         )

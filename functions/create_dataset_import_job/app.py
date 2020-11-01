@@ -2,7 +2,9 @@ from os import environ
 import actions
 from loader import Loader
 
-ARN = 'arn:aws:forecast:{region}:{account}:dataset-import-job/{name}/{name}_{date}'
+IMPORT_JOB_NAME = '{dataset_name}_{date}'
+IMPORT_JOB_ARN = 'arn:aws:forecast:{region}:{account}:dataset-import-job/{dataset_name}/{import_job_name}'
+
 LOADER = Loader()
 
 
@@ -10,11 +12,16 @@ def lambda_handler(event, context):
     print(event)
     status = None
     # TODO: Support multiple datasets
-    event['DatasetImportJobArn'] = ARN.format(
+    event['DatasetImportJobName'] = IMPORT_JOB_NAME.format(
+        dataset_name=event['DatasetName'],
+        date=event['CurrentDate']
+    )
+    event['DatasetImportJobArn'] = IMPORT_JOB_ARN.format(
+        region=environ['AWS_REGION'],
         account=event['AccountID'],
-        date=event['CurrentDate'],
-        name=event['Datasets'][0]['DatasetName'],
-        region=environ['AWS_REGION']
+        dataset_name=event['DatasetName'],
+        import_job_name=event['DatasetImportJobName'],
+
     )
     try:
         status = LOADER.forecast_cli.describe_dataset_import_job(
@@ -27,10 +34,7 @@ def lambda_handler(event, context):
         )
 
         LOADER.forecast_cli.create_dataset_import_job(
-            DatasetImportJobName='{name}_{date}'.format(
-                name=event['Datasets'][0]['DatasetName'],
-                date=event['CurrentDate']
-            ),
+            DatasetImportJobName=event['DatasetImportJobName'],
             DatasetArn=event['DatasetArn'],
             DataSource={
                 'S3Config':
