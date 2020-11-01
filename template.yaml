@@ -167,7 +167,7 @@ Resources:
   SharedLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
-      LayerName: testfolderlayer
+      LayerName: forecast_sample_layer
       ContentUri: functions/shared/
       CompatibleRuntimes:
         - python3.8
@@ -216,24 +216,13 @@ Resources:
           S3_BUCKET_NAME: !Ref S3BucketName
           TGT_S3_FOLDER: !FindInMap [Constants, S3, TgtS3Folder]
 
-  CreateForecastExportJob:
-    Type: AWS::Serverless::Function
-    Properties:
-      Description: "Creates a forecast export job for exporting predicted result to S3 bucket."
-      Environment:
-        Variables:
-          FORECAST_EXPORT_RESULT_ROLE_ARN: !GetAtt S3UpdateRoleForForecast.Arn
-          S3_BUCKET_NAME: !Ref S3BucketName
-          TGT_S3_FOLDER: !FindInMap [Constants, S3, TgtS3Folder]
-      CodeUri: functions/create_forecast_export_job/
-      Role: !GetAtt ForecastPipelineRoleForLambda.Arn
-
   CreatePredictor:
     Type: AWS::Serverless::Function
     Properties:
       Description: "Creates an Amazon Forecast predictor(ML model)."
       CodeUri: functions/create_predictor/
       Role: !GetAtt ForecastPipelineRoleForLambda.Arn
+
   DeleteOutdatedDatasetImportJobs:
     Type: AWS::Serverless::Function
     Properties:

@@ -13,8 +13,8 @@ def take_action(status):
         raise ResourceFailed
     return True
 
+
 def take_action_delete(status):
     if status in {'DELETE_PENDING', 'DELETE_IN_PROGRESS'}:
         raise ResourcePending
     raise ResourceFailed
-
