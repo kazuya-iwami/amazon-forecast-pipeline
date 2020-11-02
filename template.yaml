@@ -5,16 +5,19 @@ Description: "ML Pipeline of Amazon Forecast"
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    # AutoPublishAlias: live # See https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/automating-updates-to-serverless-apps.html
-    # DeploymentPreference:
-    #   Type: AllAtOnce
     MemorySize: 1024
     Runtime: python3.8
     Handler: app.lambda_handler
     Timeout: 180
-    ReservedConcurrentExecutions: 2 # There can be two state machines executing the same function at the same time
     Layers:
       - !Ref SharedLayer
+      - !GetAtt AwsLambdaPowertoolsPythonLayer.Outputs.LayerVersionArn
+    Environment:
+      Variables:
+        # https://awslabs.github.io/aws-lambda-powertools-python/core/logger/
+        LOG_LEVEL: INFO
+        POWERTOOLS_LOGGER_LOG_EVENT: true
+        POWERTOOLS_SERVICE_NAME: !Ref AWS::StackName
 
 # Define some constants which can be used across entire cloudformation stack
 Mappings:
@@ -172,6 +175,14 @@ Resources:
       CompatibleRuntimes:
         - python3.8
       RetentionPolicy: Delete
+
+  # See https://awslabs.github.io/aws-lambda-powertools-python/#lambda-layer
+  AwsLambdaPowertoolsPythonLayer:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location:
+        ApplicationId: arn:aws:serverlessrepo:eu-west-1:057560766410:applications/aws-lambda-powertools-python-layer
+        SemanticVersion: 1.4.0
 
   CreateDataset:
     Type: AWS::Serverless::Function
