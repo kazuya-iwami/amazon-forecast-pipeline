@@ -57,7 +57,7 @@ def lambda_handler(event, context):
     predictor = event['Predictor']
 
     event['PredictorName'] = PREDICTOR_NAME.format(
-        project_name=environ['ProjectName'],
+        project_name=event['ProjectName'],
         date=event['CurrentDate']
     )
     event['PredictorArn'] = PREDICTOR_ARN.format(
