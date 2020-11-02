@@ -23,12 +23,12 @@ def lambda_handler(event, _):
     """
     logger.info({'message': 'Event received', 'event': event})
 
-    datasets = event['Datasets']
+    # TODO: Support multiple datasets
     event['AccountID'] = account_id
     event['CurrentDate'] = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     event['DatasetName'] = DATASET_NAME.format(
         project_name=event['ProjectName'],
-        dataset_type=datasets[0]['DatasetType']
+        dataset_type=event['Datasets'][0]['DatasetType']
     )
     event['DatasetArn'] = DATASET_ARN.format(
         region=environ['AWS_REGION'],
@@ -43,24 +43,28 @@ def lambda_handler(event, _):
             'message': 'forecast_client.describe_dataset called',
             'response': response
         })
+
     except forecast_client.exceptions.ResourceNotFoundException:
-        logger.info('Dataset not found. Will follow to create dataset.')
-        for dataset in datasets:
+        logger.info('Dataset not found. Creating new dataset.')
+        for dataset in event['Datasets']:
             response = forecast_client.create_dataset(
                 **dataset,
                 DatasetName=event['DatasetName']
             )
             logger.info({
-                'message': 'Called forecast_client.create_dataset',
+                'message': 'forecast_client.create_dataset called',
                 'response': response
             })
+
         response = forecast_client.describe_dataset(
             DatasetArn=event['DatasetArn']
         )
         logger.info({
-            'message': 'Called forecast_client.describe_dataset',
+            'message': 'forecast_client.describe_dataset called',
             'response': response
         })
 
+    # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
+    # ResourcePending exception will be thrown and this Lambda function will be retried.
     actions.take_action(response['Status'])
     return event

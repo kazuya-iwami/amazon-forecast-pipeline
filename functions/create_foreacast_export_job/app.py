@@ -1,16 +1,26 @@
+"""
+Export a result of forecast into S3 bucket
+"""
 from os import environ
-import actions
-from loader import Loader
+import boto3
+# From Lambda Layers
+import actions  # pylint: disable=import-error
+from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 FORECAST_EXPORT_JOB_NAME = '{project_name}_{date}'
 FORECAST_EXPORT_JOB_ARN = 'arn:aws:forecast:{region}:{account}:forecast-export-job/' \
     '{forecast_name}/{export_job_name}'
-LOADER = Loader()
+
+logger = Logger()
+forecast_client = boto3.client('forecast')
 
 
-def lambda_handler(event, context):
-    print(event)
-    status = None
+def lambda_handler(event, _):
+    """
+    Lambda function handler
+    """
+    logger.info({'message': 'Event received', 'event': event})
+
     event['ForecastExportJobName'] = FORECAST_EXPORT_JOB_NAME.format(
         project_name=event['ProjectName'],
         date=event['CurrentDate']
@@ -22,15 +32,17 @@ def lambda_handler(event, context):
         export_job_name=event['ForecastExportJobName']
     )
 
-    # Creates forecast export job if it does not exist yet. Will trhow an exception
-    # while the forecast export job is being created.
     try:
-        status = LOADER.forecast_cli.describe_forecast_export_job(
+        response = forecast_client.describe_forecast_export_job(
             ForecastExportJobArn=event['ForecastExportJobArn']
         )
-    except LOADER.forecast_cli.exceptions.ResourceNotFoundException:
-        LOADER.logger.info('Forecast export not found. Creating new export.')
-        LOADER.forecast_cli.create_forecast_export_job(
+        logger.info({
+            'message': 'forecast_client.describe_forecast_export_job called',
+            'response': response
+        })
+    except forecast_client.forecast_cli.exceptions.ResourceNotFoundException:
+        logger.info('Forecast export not found. Creating new export.')
+        response = forecast_client.create_forecast_export_job(
             ForecastExportJobName=event['ForecastExportJobName'],
             ForecastArn=event['ForecastArn'],
             Destination={
@@ -46,9 +58,20 @@ def lambda_handler(event, context):
                     }
             }
         )
-        status = LOADER.forecast_cli.describe_forecast_export_job(
+        logger.info({
+            'message': 'forecast_client.create_forecast_export_job called',
+            'response': response
+        })
+
+        response = forecast_client.describe_forecast_export_job(
             ForecastExportJobArn=event['ForecastExportJobArn']
         )
+        logger.info({
+            'message': 'forecast_client.describe_forecast_export_job called',
+            'response': response
+        })
 
-    actions.take_action(status['Status'])
+    # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
+    # ResourcePending exception will be thrown and this Lambda function will be retried.
+    actions.take_action(response['Status'])
     return event

@@ -1,16 +1,25 @@
+"""
+Creates a forecast for each item in the target_time_series dataset.
+"""
 from os import environ
-import actions
-from loader import Loader
+import boto3
+# From Lambda Layers
+import actions  # pylint: disable=import-error
+from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 FORECAST_NAME = '{project_name}_{date}'
 FORECAST_ARN = 'arn:aws:forecast:{region}:{account}:forecast/{forecast_name}'
-LOADER = Loader()
+
+logger = Logger()
+forecast_client = boto3.client('forecast')
 
 
-def lambda_handler(event, context):
-    print(event)
-    forecast = event['Forecast']
-    status = None
+def lambda_handler(event, _):
+    """
+    Lambda function handler
+    """
+    logger.info({'message': 'Event received', 'event': event})
+
     event['ForecastName'] = FORECAST_NAME.format(
         project_name=event['ProjectName'],
         date=event['CurrentDate']
@@ -21,23 +30,36 @@ def lambda_handler(event, context):
         forecast_name=event['ForecastName']
     )
 
-    # Creates Forecast and export Predictor metrics if Forecast does not exist yet.
-    # Will throw an exception while the forecast is being created.
     try:
-        status = LOADER.forecast_cli.describe_forecast(
+        response = forecast_client.describe_forecast(
             ForecastArn=event['ForecastArn']
         )
+        logger.info({
+            'message': 'forecast_client.describe_forecast called',
+            'response': response
+        })
 
-    except LOADER.forecast_cli.exceptions.ResourceNotFoundException:
-        LOADER.logger.info('Forecast not found. Creating new forecast.')
-        LOADER.forecast_cli.create_forecast(
-            **forecast,
+    except forecast_client.exceptions.ResourceNotFoundException:
+        logger.info('Forecast not found. Creating new forecast.')
+        response = forecast_client.create_forecast(
+            **event['Forecast'],
             ForecastName=event['ForecastName'],
             PredictorArn=event['PredictorArn']
         )
-        status = LOADER.forecast_cli.describe_forecast(
+        logger.info({
+            'message': 'forecast_client.create_forecast called',
+            'response': response
+        })
+
+        response = forecast_client.describe_forecast(
             ForecastArn=event['ForecastArn']
         )
+        logger.info({
+            'message': 'forecast_client.describe_forecast called',
+            'response': response
+        })
 
-    actions.take_action(status['Status'])
+    # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
+    # ResourcePending exception will be thrown and this Lambda function will be retried.
+    actions.take_action(response['Status'])
     return event

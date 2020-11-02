@@ -218,7 +218,7 @@ Resources:
   CreateForecast:
     Type: AWS::Serverless::Function
     Properties:
-      Description: "Creates a forecast for each item in the dataset that was used to train the predictor."
+      Description: "Creates a forecast for each item in the target_time_series dataset."
       CodeUri: functions/create_foreacast/
       Role: !GetAtt ForecastPipelineRoleForLambda.Arn
 

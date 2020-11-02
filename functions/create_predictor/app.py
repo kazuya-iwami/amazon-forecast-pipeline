@@ -1,19 +1,24 @@
+"""
+Creates an Amazon Forecast predictor(ML model).
+"""
 from os import environ
 import boto3
-import actions
-from loader import Loader
+# From Lambda Layers
+import actions  # pylint: disable=import-error
+from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 PREDICTOR_NAME = '{project_name}_{date}'
 PREDICTOR_ARN = 'arn:aws:forecast:{region}:{account}:predictor/{predictor_name}'
-LOADER = Loader()
 
+logger = Logger()
+forecast_client = boto3.client('forecast')
 cloudwatch_client = boto3.client('cloudwatch')
-
-# Post training accuracy metrics from the previous step (predictor) to CloudWatch
 
 
 def post_metric(metrics):
-    # print(dumps(metrics))
+    """
+    Post training accuracy metrics from the previous step (predictor) to CloudWatch
+    """
     for metric in metrics['PredictorEvaluationResults']:
         cloudwatch_client.put_metric_data(
             Namespace='FORECAST',
@@ -51,10 +56,11 @@ def post_metric(metrics):
         )
 
 
-def lambda_handler(event, context):
-    print(event)
-    status = None
-    predictor = event['Predictor']
+def lambda_handler(event, _):
+    """
+    Lambda function handler
+    """
+    logger.info({'message': 'Event received', 'event': event})
 
     event['PredictorName'] = PREDICTOR_NAME.format(
         project_name=event['ProjectName'],
@@ -66,33 +72,49 @@ def lambda_handler(event, context):
         predictor_name=event['PredictorName']
     )
     try:
-        status = LOADER.forecast_cli.describe_predictor(
+        response = forecast_client.describe_predictor(
             PredictorArn=event['PredictorArn']
         )
+        logger.info({
+            'message': 'orecast_client.describe_predictor called',
+            'response': response
+        })
 
-    except LOADER.forecast_cli.exceptions.ResourceNotFoundException:
-        LOADER.logger.info(
-            'Predictor not found! Will follow to create new predictor.'
+    except forecast_client.exceptions.ResourceNotFoundException:
+        logger.info(
+            'Predictor not found. Creating new predictor.'
         )
-        if 'InputDataConfig' in predictor.keys():
-            predictor['InputDataConfig']['DatasetGroupArn'] = event[
-                'DatasetGroupArn']
+        if 'InputDataConfig' in event['Predictor'].keys():
+            event['Predictor']['InputDataConfig']['DatasetGroupArn'] = \
+                event['DatasetGroupArn']
         else:
-            predictor['InputDataConfig'] = {
+            event['Predictor']['InputDataConfig'] = {
                 'DatasetGroupArn': event['DatasetGroupArn']
             }
-        LOADER.forecast_cli.create_predictor(
-            **predictor,
+        response = forecast_client.create_predictor(
+            **event['Predictor'],
             PredictorName=event['PredictorName']
         )
-        status = LOADER.forecast_cli.describe_predictor(
+        logger.info({
+            'message': 'forecast_client.create_predictor called',
+            'response': response
+        })
+
+        response = forecast_client.describe_predictor(
             PredictorArn=event["PredictorArn"]
         )
-    actions.take_action(status['Status'])
+        logger.info({
+            'message': 'forecast_client.describe_predictor called',
+            'response': response
+        })
+
+    # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
+    # ResourcePending exception will be thrown and this Lambda function will be retried.
+    actions.take_action(response['Status'])
 
     # Completed creating Predictor.
     post_metric(
-        LOADER.forecast_cli.get_accuracy_metrics(
+        forecast_client.get_accuracy_metrics(
             PredictorArn=event['PredictorArn']
         )
     )
