@@ -11,7 +11,7 @@
                     "Domain": "CUSTOM"
                 },
                 "Predictor": {
-                    "ForecastHorizon": 72,
+                    "ForecastHorizon": 2,
                     "FeaturizationConfig": {
                         "ForecastFrequency": "H"
                     },
@@ -19,9 +19,7 @@
                 },
                 "Forecast": {
                     "ForecastTypes": [
-                        "0.10",
-                        "0.50",
-                        "0.90"
+                        "0.50"
                     ]
                 },
                 "TimestampFormat": "yyyy-MM-dd hh:mm:ss",
