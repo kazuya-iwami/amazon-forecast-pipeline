@@ -40,7 +40,7 @@ def lambda_handler(event, _):
             'message': 'forecast_client.describe_forecast_export_job called',
             'response': response
         })
-    except forecast_client.forecast_cli.exceptions.ResourceNotFoundException:
+    except forecast_client.exceptions.ResourceNotFoundException:
         logger.info('Forecast export not found. Creating new export.')
         response = forecast_client.create_forecast_export_job(
             ForecastExportJobName=event['ForecastExportJobName'],

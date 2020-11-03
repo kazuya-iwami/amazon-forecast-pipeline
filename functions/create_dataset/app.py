@@ -24,6 +24,8 @@ def lambda_handler(event, _):
     logger.info({'message': 'Event received', 'event': event})
 
     # TODO: Support multiple datasets
+    # Replace hyphen of stack_name to underscore because some resource names do not support hyphen.
+    event['ProjectName'] = environ['STACK_NAME'].replace('-', '_')
     event['AccountID'] = account_id
     event['CurrentDate'] = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
     event['DatasetName'] = DATASET_NAME.format(

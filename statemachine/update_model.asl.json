@@ -6,7 +6,6 @@
             "Type": "Task",
             "Resource": "${CreateDatasetArn}",
             "Parameters": {
-                "ProjectName": "ForecastPipeline",
                 "DatasetGroup": {
                     "Domain": "CUSTOM"
                 },
