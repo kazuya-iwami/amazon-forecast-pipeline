@@ -31,23 +31,12 @@ Mappings:
       MetadataName: "metadata.csv"
 
 Parameters:
-  # Since s3 bucket name has to been unique across all accounts all regions, so please specify your own bucket name
+  # please specify your own bucket name which contains training data.
   S3BucketName:
     Type: String
 
 Resources:
   # Shared Infrastructures
-  # --------------- S3 Bucket ---------------
-  # holding training data and prediction result
-  S3Bucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Ref S3BucketName
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: True
-        BlockPublicPolicy: True
-        IgnorePublicAcls: True
-        RestrictPublicBuckets: True
 
   # --------------- IAM Role ---------------
   # associated with lambda functions to allow them to call Forecast API and access S3 bucket
@@ -77,7 +66,10 @@ Resources:
                   !Join [
                     "",
                     [
-                      !GetAtt S3Bucket.Arn,
+                      "arn:",
+                      !Ref AWS::Partition,
+                      ":s3:::",
+                      !Ref S3BucketName,
                       "/",
                       !FindInMap [Constants, S3, SrcS3Folder],
                       "/*",
@@ -113,7 +105,10 @@ Resources:
                   !Join [
                     "",
                     [
-                      !GetAtt S3Bucket.Arn,
+                      "arn:",
+                      !Ref AWS::Partition,
+                      ":s3:::",
+                      !Ref S3BucketName,
                       "/",
                       !FindInMap [Constants, S3, TgtS3Folder],
                       "/*",
