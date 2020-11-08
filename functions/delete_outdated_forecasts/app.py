@@ -70,7 +70,7 @@ def lambda_handler(event, _):
     logger.info({'message': 'Event received', 'event': event})
 
     target_forecast_arns = list_target_forecast_arns(
-        event['ProjectName'], event['CURRENT_DATE'], 'ACTIVE')
+        event['ProjectName'], event['CurrentDate'], 'ACTIVE')
 
     # Delete resources
     for forecast_arn in target_forecast_arns:
@@ -91,9 +91,9 @@ def lambda_handler(event, _):
     # When the resource is in DELETE_PENDING or DELETE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
     deleting_forecast_arns = \
-        list_target_forecast_arns(event['ProjectName'], event['CURRENT_DATE'], 'DELETE_PENDING') + \
+        list_target_forecast_arns(event['ProjectName'], event['CurrentDate'], 'DELETE_PENDING') + \
         list_target_forecast_arns(
-            event['ProjectName'], event['CURRENT_DATE'], 'DELETE_IN_PROGRESS')
+            event['ProjectName'], event['CurrentDate'], 'DELETE_IN_PROGRESS')
     if len(deleting_forecast_arns) != 0:
         logger.info({
             'message': 'these resources are deleting.',
