@@ -1,5 +1,5 @@
 """
-Delete 
+Delete outdated forecast export jobs
 """
 import re
 import boto3
@@ -27,6 +27,10 @@ def list_target_export_job_arns(project_name, status):
             },
         ]
     )
+    logger.info({
+        'message': 'forecast_client.list_forecast_export_jobs called',
+        'response': response
+    })
     export_job_arns = [job['ForecastExportJobArn']
                        for job in response['ForecastExportJobs']]
 
@@ -40,7 +44,7 @@ def list_target_export_job_arns(project_name, status):
             if retrieved_project_name == project_name:
                 target_export_job_arns.append(job_arn)
     logger.info({
-        'message': 'list_target_export_job_arns() called',
+        'message': 'list_target_export_job_arns() completed',
         'project_name': project_name,
         'status': status,
         'result': target_export_job_arns
@@ -52,6 +56,8 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
+    logger.structure_logs(
+        append=True, lambda_name='delete_outdated_foreast_export_jobs', trace_id=event['CurrentDate'])
     logger.info({'message': 'Event received', 'event': event})
 
     target_export_job_arns = list_target_export_job_arns(
@@ -70,8 +76,8 @@ def lambda_handler(event, _):
             })
         except forecast_client.exceptions.ResourceNotFoundException:
             logger.warn({
-                'message': 'DatasetImportJob has already been deleted',
-                'job_arn': job_arn
+                'message': 'ForecastExportJob has already been deleted',
+                'export_job_arn': job_arn
             })
 
     # When the resource is in DELETE_PENDING or DELETE_IN_PROGRESS,
@@ -82,7 +88,7 @@ def lambda_handler(event, _):
     if len(deleting_export_job_arns) != 0:
         logger.info({
             'message': 'these resources are deleting.',
-            'response': deleting_export_job_arns
+            'deleting_export_job_arns': deleting_export_job_arns
         })
         raise actions.ResourcePending
 

@@ -19,6 +19,8 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
+    logger.structure_logs(
+        append=True, lambda_name='create_foreacast_export_job', trace_id=event['CurrentDate'])
     logger.info({'message': 'Event received', 'event': event})
 
     event['ForecastExportJobName'] = FORECAST_EXPORT_JOB_NAME.format(

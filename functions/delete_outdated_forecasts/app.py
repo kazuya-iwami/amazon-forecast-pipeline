@@ -28,7 +28,12 @@ def list_target_forecast_arns(project_name, current_date, status):
             },
         ]
     )
-    forecast_arns = [job['ForecastArn'] for job in response['Forecasts']]
+    logger.info({
+        'message': 'forecast_client.list_forecast_forecasts called',
+        'response': response
+    })
+    forecast_arns = [forecast['ForecastArn']
+                     for forecast in response['Forecasts']]
     target_forecast_arns = []
 
     current_dt = datetime.datetime.strptime(
@@ -40,7 +45,7 @@ def list_target_forecast_arns(project_name, current_date, status):
             # Check if the forecast is associated to the target project.
             retrieved_project_name = result.group(1)
             if retrieved_project_name == project_name:
-                # Ignore forecasts that are newer than one associated to this StepFunctions state machine.
+                # Ignore forecasts that are created later than that associated to this StepFunctions state machine.
                 dt = datetime.datetime.strptime(
                     result.group(2), '%Y_%m_%d_%H_%M_%S')
                 if current_dt >= dt:
@@ -60,6 +65,8 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
+    logger.structure_logs(
+        append=True, lambda_name='delete_outdated_forecasts', trace_id=event['CurrentDate'])
     logger.info({'message': 'Event received', 'event': event})
 
     target_forecast_arns = list_target_forecast_arns(
@@ -90,7 +97,7 @@ def lambda_handler(event, _):
     if len(deleting_forecast_arns) != 0:
         logger.info({
             'message': 'these resources are deleting.',
-            'response': deleting_forecast_arns
+            'deleting_forecast_arns': deleting_forecast_arns
         })
         raise actions.ResourcePending
 

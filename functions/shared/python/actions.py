@@ -7,14 +7,8 @@ class ResourceFailed(Exception):
 
 
 def take_action(status):
-    if status in {'CREATE_PENDING', 'CREATE_IN_PROGRESS'}:
+    if status in {'CREATE_PENDING', 'CREATE_IN_PROGRESS', 'UPDATE_PENDING', 'UPDATE_IN_PROGRESS'}:
         raise ResourcePending
     if status != 'ACTIVE':
         raise ResourceFailed
     return True
-
-
-def take_action_delete(status):
-    if status in {'DELETE_PENDING', 'DELETE_IN_PROGRESS'}:
-        raise ResourcePending
-    raise ResourceFailed

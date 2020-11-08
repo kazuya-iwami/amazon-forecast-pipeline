@@ -21,13 +21,16 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
+    current_date = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    logger.structure_logs(
+        append=True, lambda_name='create_dataset', trace_id=current_date)
     logger.info({'message': 'Event received', 'event': event})
 
     # TODO: Support multiple datasets
     # Replace hyphen of stack_name to underscore because some resource names do not support hyphen.
     event['ProjectName'] = environ['STACK_NAME'].replace('-', '_')
     event['AccountID'] = account_id
-    event['CurrentDate'] = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    event['CurrentDate'] = current_date
     event['DatasetName'] = DATASET_NAME.format(
         project_name=event['ProjectName'],
         dataset_type=event['Datasets'][0]['DatasetType']

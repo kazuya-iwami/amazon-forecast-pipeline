@@ -60,6 +60,8 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
+    logger.structure_logs(
+        append=True, lambda_name='create_predictor', trace_id=event['CurrentDate'])
     logger.info({'message': 'Event received', 'event': event})
 
     event['PredictorName'] = PREDICTOR_NAME.format(
@@ -76,7 +78,7 @@ def lambda_handler(event, _):
             PredictorArn=event['PredictorArn']
         )
         logger.info({
-            'message': 'orecast_client.describe_predictor called',
+            'message': 'forecast_client.describe_predictor called',
             'response': response
         })
 
