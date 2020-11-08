@@ -44,9 +44,10 @@ def lambda_handler(event, _):
         })
 
     except forecast_client.exceptions.ResourceNotFoundException:
-        logger.info(
-            'Dataset import job not found. Creating new job.'
-        )
+        logger.info({
+            'message': 'creating new dataset import job',
+            'dataset_import_job_arn': event['DatasetImportJobArn']
+        })
 
         response = forecast_client.create_dataset_import_job(
             DatasetImportJobName=event['DatasetImportJobName'],
@@ -82,4 +83,10 @@ def lambda_handler(event, _):
     # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
     actions.take_action(response['Status'])
+
+    logger.info({
+        'message': 'dataset import job was created successfully',
+        'dataset_import_job_arn': event['DatasetImportJobArn']
+    })
+
     return event

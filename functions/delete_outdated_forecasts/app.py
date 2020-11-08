@@ -19,7 +19,7 @@ def list_target_forecast_arns(project_name, current_date, status):
     """
     List forecast ARNs which should be deleted.
     """
-    response = forecast_client.list_forecast_forecasts(
+    response = forecast_client.list_forecasts(
         Filters=[
             {
                 'Key': 'Status',

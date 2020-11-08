@@ -83,9 +83,10 @@ def lambda_handler(event, _):
         })
 
     except forecast_client.exceptions.ResourceNotFoundException:
-        logger.info(
-            'Predictor not found. Creating new predictor.'
-        )
+        logger.info({
+            'message': 'creating new predictor',
+            'predictor_arn': event['PredictorArn']
+        })
         if 'InputDataConfig' in event['Predictor'].keys():
             event['Predictor']['InputDataConfig']['DatasetGroupArn'] = \
                 event['DatasetGroupArn']
@@ -115,9 +116,16 @@ def lambda_handler(event, _):
     actions.take_action(response['Status'])
 
     # Completed creating Predictor.
+    logger.info({
+        'message': 'predictor was created successfully',
+        'predictor_arn': event['PredictorArn']
+    })
+
+    # Post accuracy information to CloudWatch Metrics
     post_metric(
         forecast_client.get_accuracy_metrics(
             PredictorArn=event['PredictorArn']
         )
     )
+
     return event

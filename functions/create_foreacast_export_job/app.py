@@ -43,7 +43,10 @@ def lambda_handler(event, _):
             'response': response
         })
     except forecast_client.exceptions.ResourceNotFoundException:
-        logger.info('Forecast export not found. Creating new export.')
+        logger.info({
+            'message': 'creating new forecast export job',
+            'forecast_export_job_arn': event['ForecastExportJobArn']
+        })
         response = forecast_client.create_forecast_export_job(
             ForecastExportJobName=event['ForecastExportJobName'],
             ForecastArn=event['ForecastArn'],
@@ -76,4 +79,10 @@ def lambda_handler(event, _):
     # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
     actions.take_action(response['Status'])
+
+    logger.info({
+        'message': 'forecast export job was created successfully',
+        'forecast_export_job_arn': event['ForecastExportJobArn']
+    })
+
     return event

@@ -40,9 +40,10 @@ def lambda_handler(event, _):
         })
 
     except forecast_client.exceptions.ResourceNotFoundException:
-        logger.info(
-            'Dataset Group not found. Creating new dataset group.'
-        )
+        logger.info({
+            'message': 'creating new dataset group',
+            'dataset_group_arn': event['DatasetGroupArn']
+        })
         # TODO: Support multiple datasets
         response = forecast_client.create_dataset_group(
             **event['DatasetGroup'],
@@ -65,4 +66,10 @@ def lambda_handler(event, _):
     # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
     actions.take_action(response['Status'])
+
+    logger.info({
+        'message': 'dataset group was created successfully',
+        'dataset_group_arn': event['DatasetGroupArn']
+    })
+
     return event

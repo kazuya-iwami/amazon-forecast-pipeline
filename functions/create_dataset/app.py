@@ -50,8 +50,11 @@ def lambda_handler(event, _):
         })
 
     except forecast_client.exceptions.ResourceNotFoundException:
-        logger.info('Dataset not found. Creating new dataset.')
         for dataset in event['Datasets']:
+            logger.info({
+                'message': 'creating new dataset',
+                'dataset_arn': event['DatasetArn']
+            })
             response = forecast_client.create_dataset(
                 **dataset,
                 DatasetName=event['DatasetName']
@@ -72,4 +75,9 @@ def lambda_handler(event, _):
     # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
     actions.take_action(response['Status'])
+
+    logger.info({
+        'message': 'datasets were created successfully',
+        'dataset_arns': [event['DatasetArn']]
+    })
     return event
