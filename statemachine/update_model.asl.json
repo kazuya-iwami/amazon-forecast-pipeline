@@ -190,13 +190,22 @@
         "DeleteOutdatedForecastExportJobs": {
             "Type": "Task",
             "Resource": "${DeleteOutdatedForecastExportJobsArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "States.TaskFailed"
+                        "ResourcePending"
                     ],
                     "IntervalSeconds": 10,
-                    "MaxAttempts": 10,
+                    "MaxAttempts": 5,
                     "BackoffRate": 2
                 }
             ],
@@ -205,13 +214,22 @@
         "DeleteOutdatedForecasts": {
             "Type": "Task",
             "Resource": "${DeleteOutdatedForecastsArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "States.TaskFailed"
+                        "ResourcePending"
                     ],
                     "IntervalSeconds": 10,
-                    "MaxAttempts": 10,
+                    "MaxAttempts": 5,
                     "BackoffRate": 2
                 }
             ],
@@ -220,13 +238,22 @@
         "DeleteOutdatedPredictors": {
             "Type": "Task",
             "Resource": "${DeleteOutdatedPredictorsArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "States.TaskFailed"
+                        "ResourcePending"
                     ],
                     "IntervalSeconds": 10,
-                    "MaxAttempts": 10,
+                    "MaxAttempts": 5,
                     "BackoffRate": 2
                 }
             ],
@@ -235,13 +262,22 @@
         "DeleteOutdatedDatasetImportJobs": {
             "Type": "Task",
             "Resource": "${DeleteOutdatedDatasetImportJobsArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
             "Retry": [
                 {
                     "ErrorEquals": [
-                        "States.TaskFailed"
+                        "ResourcePending"
                     ],
                     "IntervalSeconds": 10,
-                    "MaxAttempts": 10,
+                    "MaxAttempts": 5,
                     "BackoffRate": 2
                 }
             ],
