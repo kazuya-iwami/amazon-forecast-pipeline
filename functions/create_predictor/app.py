@@ -61,7 +61,7 @@ def lambda_handler(event, _):
     Lambda function handler
     """
     logger.structure_logs(
-        append=True, lambda_name='create_predictor', trace_id=event['CurrentDate'])
+        append=False, lambda_name='create_predictor', trace_id=event['TraceId'])
     logger.info({'message': 'Event received', 'event': event})
 
     event['PredictorName'] = PREDICTOR_NAME.format(

@@ -20,7 +20,7 @@ def lambda_handler(event, _):
     Lambda function handler
     """
     logger.structure_logs(
-        append=True, lambda_name='create_dataset_import_job', trace_id=event['CurrentDate'])
+        append=False, lambda_name='create_dataset_import_job', trace_id=event['TraceId'])
     logger.info({'message': 'Event received', 'event': event})
 
     # TODO: Support multiple datasets
