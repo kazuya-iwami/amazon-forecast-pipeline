@@ -6,6 +6,7 @@
             "Type": "Task",
             "Resource": "${CreateDatasetArn}",
             "Parameters": {
+                "StateMachineName": "update-model",
                 "DatasetGroup": {
                     "Domain": "CUSTOM"
                 },

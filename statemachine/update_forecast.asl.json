@@ -6,6 +6,7 @@
             "Type": "Task",
             "Resource": "${CreateDatasetArn}",
             "Parameters": {
+                "StateMachineName": "update-forecast",
                 "DatasetGroup": {
                     "Domain": "CUSTOM"
                 },
