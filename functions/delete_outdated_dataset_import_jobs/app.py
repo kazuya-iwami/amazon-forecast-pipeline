@@ -6,6 +6,7 @@ import datetime
 import boto3
 # From Lambda Layers
 import actions  # pylint: disable=import-error
+from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 IMPORT_JOB_PATTERN = r'^arn:aws:forecast:.+?:.+?:dataset-import-job\/(.+?)_(TARGET_TIME_SERIES|RELATED_TIME_SERIES|ITEM_METADATA)\/.+?'
@@ -129,14 +130,11 @@ def list_target_import_job_arns(project_name, status):
     return target_import_job_arns
 
 
+@lambda_handler_logger(logger=logger, lambda_name='delete_outdated_dataset_import_jobs')
 def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    logger.structure_logs(
-        append=False, lambda_name='delete_outdated_dataset_import_jobs', trace_id=event['TraceId'])
-    logger.info({'message': 'Event received', 'event': event})
-
     target_import_job_arns = list_target_import_job_arns(
         event['ProjectName'], 'ACTIVE')
 

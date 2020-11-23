@@ -2,11 +2,10 @@
 Create an Amazon Forecast dataset. The information about the dataset that you provide
 helps AWS Forecast understand how to consume the data for model training.
 """
-from os import environ
-from datetime import datetime
 import boto3
 # From Lambda Layers
 import actions  # pylint: disable=import-error
+from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 DATASET_NAME = '{project_name}_{dataset_type}'
@@ -14,32 +13,20 @@ DATASET_ARN = 'arn:aws:forecast:{region}:{account}:dataset/{dataset_name}'
 
 logger = Logger()
 forecast_client = boto3.client('forecast')
-account_id = boto3.client('sts').get_caller_identity()['Account']
 
 
+@lambda_handler_logger(logger=logger, lambda_name='create_dataset')
 def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    # Initialize current_date and trace_id
-    event['CurrentDate'] = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    event['TraceId'] = event['StateMachineName'] + '_' + event['CurrentDate']
-
-    # Initizalize logger
-    logger.structure_logs(
-        append=False, lambda_name='create_dataset', trace_id=event['TraceId'])
-    logger.info({'message': 'Event received', 'event': event})
-
     # TODO: Support multiple datasets
-    # Replace hyphen of stack_name to underscore because some resource names do not support hyphen.
-    event['ProjectName'] = environ['STACK_NAME'].replace('-', '_')
-    event['AccountID'] = account_id
     event['DatasetName'] = DATASET_NAME.format(
         project_name=event['ProjectName'],
         dataset_type=event['Datasets'][0]['DatasetType']
     )
     event['DatasetArn'] = DATASET_ARN.format(
-        region=environ['AWS_REGION'],
+        region=event['Region'],
         account=event['AccountID'],
         dataset_name=event['DatasetName']
     )
@@ -80,7 +67,7 @@ def lambda_handler(event, _):
     actions.take_action(response['Status'])
 
     logger.info({
-        'message': 'datasets were created successfully',
+        'message': 'datasets were created',
         'dataset_arns': [event['DatasetArn']]
     })
     return event

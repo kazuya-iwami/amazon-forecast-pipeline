@@ -1,10 +1,10 @@
 """
 Creates an Amazon Forecast predictor(ML model).
 """
-from os import environ
 import boto3
 # From Lambda Layers
 import actions  # pylint: disable=import-error
+from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 PREDICTOR_NAME = '{project_name}_{date}'
@@ -56,20 +56,17 @@ def post_metric(metrics):
         )
 
 
+@lambda_handler_logger(logger=logger, lambda_name='create_predictor')
 def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    logger.structure_logs(
-        append=False, lambda_name='create_predictor', trace_id=event['TraceId'])
-    logger.info({'message': 'Event received', 'event': event})
-
     event['PredictorName'] = PREDICTOR_NAME.format(
         project_name=event['ProjectName'],
         date=event['CurrentDate']
     )
     event['PredictorArn'] = PREDICTOR_ARN.format(
-        region=environ['AWS_REGION'],
+        region=event['Region'],
         account=event['AccountID'],
         predictor_name=event['PredictorName']
     )
@@ -117,7 +114,7 @@ def lambda_handler(event, _):
 
     # Completed creating Predictor.
     logger.info({
-        'message': 'predictor was created successfully',
+        'message': 'predictor was created',
         'predictor_arn': event['PredictorArn']
     })
 

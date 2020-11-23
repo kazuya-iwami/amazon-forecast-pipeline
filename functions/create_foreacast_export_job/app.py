@@ -5,6 +5,7 @@ from os import environ
 import boto3
 # From Lambda Layers
 import actions  # pylint: disable=import-error
+from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 FORECAST_EXPORT_JOB_NAME = '{project_name}_{date}'
@@ -15,20 +16,17 @@ logger = Logger()
 forecast_client = boto3.client('forecast')
 
 
+@lambda_handler_logger(logger=logger, lambda_name='create_foreacast_export_job')
 def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    logger.structure_logs(
-        append=False, lambda_name='create_foreacast_export_job', trace_id=event['TraceId'])
-    logger.info({'message': 'Event received', 'event': event})
-
     event['ForecastExportJobName'] = FORECAST_EXPORT_JOB_NAME.format(
         project_name=event['ProjectName'],
         date=event['CurrentDate']
     )
     event['ForecastExportJobArn'] = FORECAST_EXPORT_JOB_ARN.format(
-        region=environ['AWS_REGION'],
+        region=event['Region'],
         account=event['AccountID'],
         forecast_name=event['ForecastName'],
         export_job_name=event['ForecastExportJobName']
@@ -81,7 +79,7 @@ def lambda_handler(event, _):
     actions.take_action(response['Status'])
 
     logger.info({
-        'message': 'forecast export job was created successfully',
+        'message': 'forecast export job was created',
         'forecast_export_job_arn': event['ForecastExportJobArn']
     })
 

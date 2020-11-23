@@ -1,12 +1,12 @@
 """
 Creates a forecast for each item in the target_time_series dataset.
 """
-from os import environ
 import re
 import datetime
 import boto3
 # From Lambda Layers
 import actions  # pylint: disable=import-error
+from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 FORECAST_NAME = '{project_name}_{date}'
@@ -56,7 +56,7 @@ def get_latest_predictor_arn(project_name):
     target_predictor_arn = None
     sorted_target_candidates = sorted(target_candidates, key=lambda x: x['dt'])
     if len(sorted_target_candidates) > 0:
-        target_predictor_arn = sorted_target_candidates[-1]
+        target_predictor_arn = sorted_target_candidates[-1]['arn']
 
     logger.info({
         'message': 'get_latest_predictor_arn() completed',
@@ -68,20 +68,17 @@ def get_latest_predictor_arn(project_name):
     return target_predictor_arn
 
 
+@lambda_handler_logger(logger=logger, lambda_name='create_foreacast')
 def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    logger.structure_logs(
-        append=False, lambda_name='create_foreacast', trace_id=event['TraceId'])
-    logger.info({'message': 'Event received', 'event': event})
-
     event['ForecastName'] = FORECAST_NAME.format(
         project_name=event['ProjectName'],
         date=event['CurrentDate']
     )
     event['ForecastArn'] = FORECAST_ARN.format(
-        region=environ['AWS_REGION'],
+        region=event['Region'],
         account=event['AccountID'],
         forecast_name=event['ForecastName']
     )
@@ -132,7 +129,7 @@ def lambda_handler(event, _):
     actions.take_action(response['Status'])
 
     logger.info({
-        'message': 'forecast was created successfully',
+        'message': 'forecast was created',
         'forecast_arn': event['ForecastArn']
     })
 

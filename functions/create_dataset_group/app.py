@@ -1,10 +1,10 @@
 """
 Create an Amazon Forecast dataset group which can contain one or multiple dataset(s).
 """
-from os import environ
 import boto3
 # From Lambda Layers
 import actions  # pylint: disable=import-error
+from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 DATASET_GROUP_NAME = '{project_name}'
@@ -14,19 +14,16 @@ logger = Logger()
 forecast_client = boto3.client('forecast')
 
 
+@lambda_handler_logger(logger=logger, lambda_name='create_dataset_group')
 def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    logger.structure_logs(
-        append=False, lambda_name='create_dataset_group', trace_id=event['TraceId'])
-    logger.info({'message': 'Event received', 'event': event})
-
     event['DatasetGroupName'] = DATASET_GROUP_NAME.format(
         project_name=event['ProjectName']
     )
     event['DatasetGroupArn'] = DATASET_GROUP_ARN.format(
-        region=environ['AWS_REGION'],
+        region=event['Region'],
         account=event['AccountID'],
         dataset_group_name=event['DatasetGroupName'],
     )
@@ -68,7 +65,7 @@ def lambda_handler(event, _):
     actions.take_action(response['Status'])
 
     logger.info({
-        'message': 'dataset group was created successfully',
+        'message': 'dataset group was created',
         'dataset_group_arn': event['DatasetGroupArn']
     })
 

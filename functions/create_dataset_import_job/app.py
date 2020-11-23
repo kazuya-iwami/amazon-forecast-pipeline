@@ -5,6 +5,7 @@ from os import environ
 import boto3
 # From Lambda Layers
 import actions  # pylint: disable=import-error
+from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
 IMPORT_JOB_NAME = '{dataset_name}_{date}'
@@ -15,13 +16,11 @@ logger = Logger()
 forecast_client = boto3.client('forecast')
 
 
+@lambda_handler_logger(logger=logger, lambda_name='create_dataset_import_job')
 def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    logger.structure_logs(
-        append=False, lambda_name='create_dataset_import_job', trace_id=event['TraceId'])
-    logger.info({'message': 'Event received', 'event': event})
 
     # TODO: Support multiple datasets
     event['DatasetImportJobName'] = IMPORT_JOB_NAME.format(
@@ -29,7 +28,7 @@ def lambda_handler(event, _):
         date=event['CurrentDate']
     )
     event['DatasetImportJobArn'] = IMPORT_JOB_ARN.format(
-        region=environ['AWS_REGION'],
+        region=event['Region'],
         account=event['AccountID'],
         dataset_name=event['DatasetName'],
         import_job_name=event['DatasetImportJobName']
@@ -85,7 +84,7 @@ def lambda_handler(event, _):
     actions.take_action(response['Status'])
 
     logger.info({
-        'message': 'dataset import job was created successfully',
+        'message': 'dataset import job was created',
         'dataset_import_job_arn': event['DatasetImportJobArn']
     })
 
