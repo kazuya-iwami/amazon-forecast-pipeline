@@ -272,6 +272,8 @@ Resources:
       Role: !GetAtt ForecastPipelineRoleForLambda.Arn
 
   # --------------- StateMachine (Step Fucntion + IAM Role + CloudWatch Events ---------------
+  # -- Update Model --
+
   # Step Functions for orchestrating multiple Lambda functions to generate the Forecast predictor(ML model)
   UpdateModelStateMachine:
     Type: AWS::Serverless::StateMachine
@@ -361,6 +363,98 @@ Resources:
                   - "states:StartExecution"
                 Resource:
                   - !GetAtt UpdateModelStateMachine.Arn
+
+  # -- Update Forecast --
+
+  # Step Functions for orchestrating multiple Lambda functions to generate the Forecast predictor(ML model)
+  UpdateForecastStateMachine:
+    Type: AWS::Serverless::StateMachine
+    Properties:
+      Name: !Join ["-", [!Ref AWS::StackName, "UpdateForecastStateMachine"]]
+      Role: !GetAtt UpdateForecastStateMachineIAMRole.Arn
+      DefinitionUri: statemachine/update_forecast.asl.json
+      DefinitionSubstitutions:
+        CreateDatasetArn: !GetAtt CreateDataset.Arn
+        CreateDatasetGroupArn: !GetAtt CreateDatasetGroup.Arn
+        CreateDatasetImportJobArn: !GetAtt CreateDatasetImportJob.Arn
+        CreatePredictorArn: !GetAtt CreatePredictor.Arn
+        CreateForecastArn: !GetAtt CreateForecast.Arn
+        CreateForecastExportJobArn: !GetAtt CreateForecastExportJob.Arn
+        DeleteOutdatedForecastExportJobsArn: !GetAtt DeleteOutdatedForecastExportJobs.Arn
+        DeleteOutdatedForecastsArn: !GetAtt DeleteOutdatedForecasts.Arn
+        DeleteOutdatedPredictorsArn: !GetAtt DeleteOutdatedPredictors.Arn
+        DeleteOutdatedDatasetImportJobsArn: !GetAtt DeleteOutdatedDatasetImportJobs.Arn
+
+  # IAM Role used by UpdateForecastStateMachine to trigger Lambda functions
+  UpdateForecastStateMachineIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: "IAM role for UpdateForecastStateMachine"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - Fn::Sub: "states.${AWS::Region}.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: "CallingLambdaFunction"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource:
+                  - !GetAtt CreateDataset.Arn
+                  - !GetAtt CreateDatasetGroup.Arn
+                  - !GetAtt CreateDatasetImportJob.Arn
+                  - !GetAtt CreatePredictor.Arn
+                  - !GetAtt CreateForecast.Arn
+                  - !GetAtt CreateForecastExportJob.Arn
+                  - !GetAtt DeleteOutdatedForecastExportJobs.Arn
+                  - !GetAtt DeleteOutdatedForecasts.Arn
+                  - !GetAtt DeleteOutdatedPredictors.Arn
+                  - !GetAtt DeleteOutdatedDatasetImportJobs.Arn
+
+  # Cloudwatch Event Rule to trigger UpdateForecastStateMachine periodically(low frequency)
+  UpdateForecastStateMachineScheduledEventRule:
+    Type: AWS::Events::Rule
+    DependsOn: UpdateForecastStateMachine
+    Properties:
+      Description: "The trigger for workflow to generate or update the forecast."
+      ScheduleExpression: "rate(1 hours)"
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt UpdateForecastStateMachine.Arn
+          Id: "UpdateForecastStateMachineTarget"
+          RoleArn: !GetAtt UpdateForecastStateMachineScheduledEventRuleIAMRole.Arn
+
+  ## IAM Role used by UpdateForecastStateMachineScheduledEventRule to trigger Step Functions
+  UpdateForecastStateMachineScheduledEventRuleIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: "IAM role for ScheduledEventRule of UpdateForecastStateMachine"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service: "events.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: "TriggeringUpdateForecastStateMachineExecution"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "states:StartExecution"
+                Resource:
+                  - !GetAtt UpdateForecastStateMachine.Arn
   ## StateMachine(AWS Step functions): For orchestrating multiple Lambda functions to generate the prediction result
   # ForecastExportCronStateMachine:
   #   Type: AWS::StepFunctions::StateMachine

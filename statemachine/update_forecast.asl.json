@@ -113,11 +113,11 @@
                     "BackoffRate": 1.5
                 }
             ],
-            "Next": "CreateNewPredictor"
+            "Next": "CreateNewForecast"
         },
-        "CreateNewPredictor": {
+        "CreateNewForecast": {
             "Type": "Task",
-            "Resource": "${CreatePredictorArn}",
+            "Resource": "${CreateForecastArn}",
             "Catch": [
                 {
                     "ErrorEquals": [
@@ -133,15 +133,39 @@
                         "ResourcePending"
                     ],
                     "IntervalSeconds": 10,
-                    "MaxAttempts": 25,
+                    "MaxAttempts": 20,
                     "BackoffRate": 1.5
                 }
             ],
-            "Next": "DeleteOutdatedPredictors"
+            "Next": "CreateNewForecastExportJob"
         },
-        "DeleteOutdatedPredictors": {
+        "CreateNewForecastExportJob": {
             "Type": "Task",
-            "Resource": "${DeleteOutdatedPredictorsArn}",
+            "Resource": "${CreateForecastExportJobArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "ResourcePending"
+                    ],
+                    "IntervalSeconds": 10,
+                    "MaxAttempts": 20,
+                    "BackoffRate": 1.5
+                }
+            ],
+            "Next": "DeleteOutdatedForecastExportJobs"
+        },
+        "DeleteOutdatedForecastExportJobs": {
+            "Type": "Task",
+            "Resource": "${DeleteOutdatedForecastExportJobsArn}",
             "Catch": [
                 {
                     "ErrorEquals": [
@@ -161,11 +185,11 @@
                     "BackoffRate": 2
                 }
             ],
-            "Next": "DeleteOutdatedDatasetImportJobs"
+            "Next": "DeleteOutdatedForecasts"
         },
-        "DeleteOutdatedDatasetImportJobs": {
+        "DeleteOutdatedForecasts": {
             "Type": "Task",
-            "Resource": "${DeleteOutdatedDatasetImportJobsArn}",
+            "Resource": "${DeleteOutdatedForecastsArn}",
             "Catch": [
                 {
                     "ErrorEquals": [
