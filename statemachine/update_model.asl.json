@@ -61,8 +61,8 @@
                         "ResourcePending"
                     ],
                     "IntervalSeconds": 10,
-                    "MaxAttempts": 5,
-                    "BackoffRate": 2
+                    "MaxAttempts": 15,
+                    "BackoffRate": 1.5
                 }
             ],
             "Next": "CreateNewDatasetGroup"

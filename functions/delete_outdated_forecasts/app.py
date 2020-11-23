@@ -52,7 +52,7 @@ def list_target_forecast_arns(project_name, current_date, status):
                     target_forecast_arns.append(forecast_arn)
 
     logger.info({
-        'message': 'list_target_forecast_arns() called',
+        'message': 'list_target_forecast_arns() completed',
         'project_name': project_name,
         'current_date': current_date,
         'status': status,

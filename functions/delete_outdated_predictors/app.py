@@ -51,18 +51,16 @@ def list_target_predictor_arns(project_name, status):
     # Ingore the latest two predictors
     # because some existing forecasts may be associated to the previous predictor.
     sorted_target_candidates = sorted(target_candidates, key=lambda x: x['dt'])
-    if len(sorted_target_candidates) > 2:
-        target_predictor_arns = [predictor['arn']
-                                 for predictor in sorted_target_candidates[:-2]]
-    else:
-        target_predictor_arns = [predictor['arn']
-                                 for predictor in sorted_target_candidates]
+    target_predictor_arns = [predictor['arn']
+                             for predictor in sorted_target_candidates[:-2]]
 
     logger.info({
         'message': 'list_target_predictor_arns() completed',
         'project_name': project_name,
         'status': status,
-        'result': target_predictor_arns
+        'result': target_predictor_arns,
+        'sorted_target_candidates': sorted_target_candidates,
+
     })
     return target_predictor_arns
 

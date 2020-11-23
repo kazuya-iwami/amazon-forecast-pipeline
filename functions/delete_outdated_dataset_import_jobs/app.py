@@ -54,12 +54,8 @@ def list_preserved_import_job_arns(project_name):
     preserved_predictor_arns = []
     preserved_predictor_candidates = sorted(
         preserved_predictor_candidates, key=lambda x: x['dt'])
-    if len(preserved_predictor_candidates) > 2:
-        preserved_predictor_arns = [predictor['arn']
-                                    for predictor in preserved_predictor_candidates[-2:]]
-    else:
-        preserved_predictor_arns = [predictor['arn']
-                                    for predictor in preserved_predictor_candidates]
+    preserved_predictor_arns = [predictor['arn']
+                                for predictor in preserved_predictor_candidates[-2:]]
     logger.info({
         'message': 'Get preserved_predictor_arns in list_preserved_import_job_arns()',
         'preserved_predictor_arns': preserved_predictor_arns
@@ -119,7 +115,8 @@ def list_target_import_job_arns(project_name, status):
         list_preserved_import_job_arns(project_name))
     target_import_job_candidates = set(target_import_job_candidates)
 
-    target_import_job_arns = target_import_job_candidates - preserved_import_job_arns
+    target_import_job_arns = list(
+        target_import_job_candidates - preserved_import_job_arns)
 
     logger.info({
         'message': 'list_target_import_job_arns() completed',

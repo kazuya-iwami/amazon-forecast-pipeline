@@ -331,7 +331,7 @@ Resources:
     DependsOn: UpdateModelStateMachine
     Properties:
       Description: "The trigger for workflow to generate or update the ML model."
-      ScheduleExpression: "rate(30 days)"
+      ScheduleExpression: "rate(6 hours)"
       State: ENABLED
       Targets:
         - Arn: !GetAtt UpdateModelStateMachine.Arn
