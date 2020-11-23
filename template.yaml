@@ -425,7 +425,7 @@ Resources:
     DependsOn: UpdateForecastStateMachine
     Properties:
       Description: "The trigger for workflow to generate or update the forecast."
-      ScheduleExpression: "rate(1 hours)"
+      ScheduleExpression: "rate(1 hour)"
       State: ENABLED
       Targets:
         - Arn: !GetAtt UpdateForecastStateMachine.Arn
