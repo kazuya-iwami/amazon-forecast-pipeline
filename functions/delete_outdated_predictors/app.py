@@ -16,9 +16,9 @@ forecast_client = boto3.client('forecast')
 compiled_pattern = re.compile(PATTERN)
 
 
-def list_target_predictor_arns(project_name, status):
+def list_predictor_arns(project_name, status):
     """
-    List predictor ARNs which should be deleted.
+    List predictor ARNs.
     """
     response = forecast_client.list_predictors(
         Filters=[
@@ -38,7 +38,7 @@ def list_target_predictor_arns(project_name, status):
                       for predictor in response['Predictors']]
     target_candidates = []
 
-    # List up outdated predictors associated to the target project excluding the latest two.
+    # List up predictors associated to the target project.
     for predictor_arn in predictor_arns:
         result = compiled_pattern.match(predictor_arn)
         if result:
@@ -48,6 +48,20 @@ def list_target_predictor_arns(project_name, status):
                 dt = datetime.datetime.strptime(
                     result.group(2), '%Y_%m_%d_%H_%M_%S')
                 target_candidates.append({'arn': predictor_arn, 'dt': dt})
+    logger.info({
+        'message': 'list_predictor_arns() completed',
+        'project_name': project_name,
+        'status': status,
+        'result': target_candidates,
+    })
+    return target_candidates
+
+
+def list_deletion_target_predictor_arns(project_name):
+    """
+    List deletion target predictors, which are Active predictors except for the latest two
+    """
+    target_candidates = list_predictor_arns(project_name, 'ACTIVE')
 
     # Ingore the latest two predictors
     # because some existing forecasts may be associated to the previous predictor.
@@ -56,12 +70,10 @@ def list_target_predictor_arns(project_name, status):
                              for predictor in sorted_target_candidates[:-2]]
 
     logger.info({
-        'message': 'list_target_predictor_arns() completed',
+        'message': 'list_deletion_target_predictor_arns() completed',
         'project_name': project_name,
-        'status': status,
         'result': target_predictor_arns,
         'sorted_target_candidates': sorted_target_candidates,
-
     })
     return target_predictor_arns
 
@@ -71,8 +83,9 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    target_predictor_arns = list_target_predictor_arns(
-        event['ProjectName'], 'ACTIVE')
+    # List deletion target predictors, which is Active predoctors except for the latest two.
+    target_predictor_arns = list_deletion_target_predictor_arns(
+        event['ProjectName'])
 
     # Delete resources
     for predictor_arn in target_predictor_arns:
@@ -93,8 +106,8 @@ def lambda_handler(event, _):
     # When the resource is in DELETE_PENDING or DELETE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
     deleting_predictor_arns = \
-        list_target_predictor_arns(event['ProjectName'], 'DELETE_PENDING') + \
-        list_target_predictor_arns(event['ProjectName'], 'DELETE_IN_PROGRESS')
+        list_predictor_arns(event['ProjectName'], 'DELETE_PENDING') + \
+        list_predictor_arns(event['ProjectName'], 'DELETE_IN_PROGRESS')
     if len(deleting_predictor_arns) != 0:
         logger.info({
             'message': 'these resources are deleting.',
