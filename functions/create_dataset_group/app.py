@@ -7,7 +7,7 @@ import actions  # pylint: disable=import-error
 from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
-DATASET_GROUP_NAME = '{project_name}'
+DATASET_GROUP_NAME = '{project_name}_{date}'
 DATASET_GROUP_ARN = 'arn:aws:forecast:{region}:{account}:dataset-group/{dataset_group_name}'
 
 logger = Logger()
@@ -20,7 +20,8 @@ def lambda_handler(event, _):
     Lambda function handler
     """
     event['DatasetGroupName'] = DATASET_GROUP_NAME.format(
-        project_name=event['ProjectName']
+        project_name=event['ProjectName'],
+        date=event['TriggeredAt']
     )
     event['DatasetGroupArn'] = DATASET_GROUP_ARN.format(
         region=event['Region'],
@@ -41,11 +42,11 @@ def lambda_handler(event, _):
             'message': 'creating new dataset group',
             'dataset_group_arn': event['DatasetGroupArn']
         })
-        # TODO: Support multiple datasets
         response = forecast_client.create_dataset_group(
             **event['DatasetGroup'],
             DatasetGroupName=event['DatasetGroupName'],
-            DatasetArns=[event['DatasetArn']]
+            DatasetArns=[dataset['DatasetArn']
+                         for dataset in event['Datasets']]
         )
         logger.info({
             'message': 'forecast_client.create_dataset_group called',

@@ -23,7 +23,7 @@ def lambda_handler(event, _):
     """
     event['ForecastExportJobName'] = FORECAST_EXPORT_JOB_NAME.format(
         project_name=event['ProjectName'],
-        date=event['CurrentDate']
+        date=event['TriggeredAt']
     )
     event['ForecastExportJobArn'] = FORECAST_EXPORT_JOB_ARN.format(
         region=event['Region'],

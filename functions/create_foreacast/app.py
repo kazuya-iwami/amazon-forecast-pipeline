@@ -75,7 +75,7 @@ def lambda_handler(event, _):
     """
     event['ForecastName'] = FORECAST_NAME.format(
         project_name=event['ProjectName'],
-        date=event['CurrentDate']
+        date=event['TriggeredAt']
     )
     event['ForecastArn'] = FORECAST_ARN.format(
         region=event['Region'],

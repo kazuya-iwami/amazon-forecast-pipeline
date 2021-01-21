@@ -8,7 +8,7 @@ import actions  # pylint: disable=import-error
 from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
-IMPORT_JOB_NAME = '{dataset_name}_{date}'
+IMPORT_JOB_NAME = '{date}'
 IMPORT_JOB_ARN = 'arn:aws:forecast:{region}:{account}:dataset-import-job/{dataset_name}' \
     '/{import_job_name}'
 
@@ -22,70 +22,85 @@ def lambda_handler(event, _):
     Lambda function handler
     """
 
-    # TODO: Support multiple datasets
-    event['DatasetImportJobName'] = IMPORT_JOB_NAME.format(
-        dataset_name=event['DatasetName'],
-        date=event['CurrentDate']
-    )
-    event['DatasetImportJobArn'] = IMPORT_JOB_ARN.format(
-        region=event['Region'],
-        account=event['AccountID'],
-        dataset_name=event['DatasetName'],
-        import_job_name=event['DatasetImportJobName']
-    )
-    try:
-        response = forecast_client.describe_dataset_import_job(
-            DatasetImportJobArn=event['DatasetImportJobArn']
+    import_job_arns = []
+
+    # In this sample, create dataset import job sequentially because default limit of 'Maximum parallel running CreateDatasetImportJob tasks' is small. You should increase this limit to create dataset import job in parallel.
+    # https://docs.aws.amazon.com/forecast/latest/dg/limits.html
+    for dataset in event['Datasets']:
+        dataset_name = dataset['DatasetName']
+        dataset_arn = dataset['DatasetArn']
+        import_job_name = IMPORT_JOB_NAME.format(
+            date=event['TriggeredAt']
         )
-        logger.info({
-            'message': 'forecast_client.describe_dataset_import_job called',
-            'response': response
-        })
+        import_job_arn = IMPORT_JOB_ARN.format(
+            region=event['Region'],
+            account=event['AccountID'],
+            dataset_name=dataset_name,
+            import_job_name=import_job_name
+        )
+        import_job_arns.append(import_job_arn)
 
-    except forecast_client.exceptions.ResourceNotFoundException:
-        logger.info({
-            'message': 'creating new dataset import job',
-            'dataset_import_job_arn': event['DatasetImportJobArn']
-        })
+        filename = ''
+        for job in event['DatasetImportJobs']:
+            if job['DatasetType'] == dataset['DatasetType']:
+                filename = job['Filename']
+        if filename == '':
+            raise Exception(
+                'failed to find "Filename" for dataset import job.')
+        try:
+            response = forecast_client.describe_dataset_import_job(
+                DatasetImportJobArn=import_job_arn
+            )
+            logger.info({
+                'message': 'forecast_client.describe_dataset_import_job called',
+                'response': response,
+                'dataset_import_job_arn': import_job_arn
+            })
 
-        response = forecast_client.create_dataset_import_job(
-            DatasetImportJobName=event['DatasetImportJobName'],
-            DatasetArn=event['DatasetArn'],
-            DataSource={
-                'S3Config':
-                    {
-                        'Path':
+        except forecast_client.exceptions.ResourceNotFoundException:
+            logger.info({
+                'message': 'creating new dataset import job',
+                'dataset_import_job_arn': import_job_arn
+            })
+
+            response = forecast_client.create_dataset_import_job(
+                DatasetImportJobName=import_job_name,
+                DatasetArn=dataset_arn,
+                DataSource={
+                    'S3Config':
+                        {'Path':
                             's3://{bucket}/{folder}/{file}'.format(
                                 bucket=environ['S3_BUCKET_NAME'],
                                 folder=environ['S3_SRC_FOLDER'],
-                                file=environ['TARGET_TIME_SERIES_FILE_NAME']
+                                file=filename
                             ),
-                        'RoleArn':
-                            environ['FORECAST_IMPORT_JOB_ROLE_ARN']
-                    }
-            },
-            TimestampFormat=event['TimestampFormat']
-        )
-        logger.info({
-            'message': 'forecast_client.create_dataset_import_job called',
-            'response': response
-        })
+                            'RoleArn':
+                                environ['FORECAST_IMPORT_JOB_ROLE_ARN']
+                         }
+                },
+                TimestampFormat=event['DatasetTimestampFormat']
+            )
+            logger.info({
+                'message': 'forecast_client.create_dataset_import_job called',
+                'response': response,
+                'dataset_import_job_arn': import_job_arn
+            })
 
-        response = forecast_client.describe_dataset_import_job(
-            DatasetImportJobArn=event['DatasetImportJobArn']
-        )
-        logger.info({
-            'message': 'forecast_client.describe_dataset_import_job called',
-            'response': response
-        })
+            response = forecast_client.describe_dataset_import_job(
+                DatasetImportJobArn=import_job_arn
+            )
+            logger.info({
+                'message': 'forecast_client.describe_dataset_import_job called',
+                'response': response,
+                'dataset_import_job_arn': import_job_arn
+            })
 
-    # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS,
-    # ResourcePending exception will be thrown and this Lambda function will be retried.
-    actions.take_action(response['Status'])
+        # When the resource is in CREATE_PENDING or CREATE_IN_PROGRESS, ResourcePending exception will be thrown and this Lambda function will be retried.
+        actions.take_action(response['Status'])
 
     logger.info({
         'message': 'dataset import job was created',
-        'dataset_import_job_arn': event['DatasetImportJobArn']
+        'dataset_import_job_arns': import_job_arns
     })
 
     return event

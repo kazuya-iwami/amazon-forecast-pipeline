@@ -61,18 +61,18 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    event['PredictorName'] = PREDICTOR_NAME.format(
+    predictor_name = PREDICTOR_NAME.format(
         project_name=event['ProjectName'],
-        date=event['CurrentDate']
+        date=event['TriggeredAt']
     )
-    event['PredictorArn'] = PREDICTOR_ARN.format(
+    predictor_arn = PREDICTOR_ARN.format(
         region=event['Region'],
         account=event['AccountID'],
-        predictor_name=event['PredictorName']
+        predictor_name=predictor_name
     )
     try:
         response = forecast_client.describe_predictor(
-            PredictorArn=event['PredictorArn']
+            PredictorArn=predictor_arn
         )
         logger.info({
             'message': 'forecast_client.describe_predictor called',
@@ -82,7 +82,7 @@ def lambda_handler(event, _):
     except forecast_client.exceptions.ResourceNotFoundException:
         logger.info({
             'message': 'creating new predictor',
-            'predictor_arn': event['PredictorArn']
+            'predictor_arn': predictor_arn
         })
         if 'InputDataConfig' in event['Predictor'].keys():
             event['Predictor']['InputDataConfig']['DatasetGroupArn'] = \
@@ -93,7 +93,7 @@ def lambda_handler(event, _):
             }
         response = forecast_client.create_predictor(
             **event['Predictor'],
-            PredictorName=event['PredictorName']
+            PredictorName=predictor_name
         )
         logger.info({
             'message': 'forecast_client.create_predictor called',
@@ -115,13 +115,13 @@ def lambda_handler(event, _):
     # Completed creating Predictor.
     logger.info({
         'message': 'predictor was created',
-        'predictor_arn': event['PredictorArn']
+        'predictor_arn': predictor_arn
     })
 
     # Post accuracy information to CloudWatch Metrics
     post_metric(
         forecast_client.get_accuracy_metrics(
-            PredictorArn=event['PredictorArn']
+            PredictorArn=predictor_arn
         )
     )
 

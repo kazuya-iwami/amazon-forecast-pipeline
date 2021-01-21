@@ -37,20 +37,13 @@ def list_target_forecast_arns(project_name, current_date, status):
                      for forecast in response['Forecasts']]
     target_forecast_arns = []
 
-    current_dt = datetime.datetime.strptime(
-        current_date, '%Y_%m_%d_%H_%M_%S')
-
     for forecast_arn in forecast_arns:
         result = compiled_pattern.match(forecast_arn)
         if result:
             # Check if the forecast is associated to the target project.
             retrieved_project_name = result.group(1)
             if retrieved_project_name == project_name:
-                # Ignore forecasts that are created later than that associated to this StepFunctions state machine.
-                dt = datetime.datetime.strptime(
-                    result.group(2), '%Y_%m_%d_%H_%M_%S')
-                if current_dt >= dt:
-                    target_forecast_arns.append(forecast_arn)
+                target_forecast_arns.append(forecast_arn)
 
     logger.info({
         'message': 'list_target_forecast_arns() completed',
@@ -68,7 +61,7 @@ def lambda_handler(event, _):
     Lambda function handler
     """
     target_forecast_arns = list_target_forecast_arns(
-        event['ProjectName'], event['CurrentDate'], 'ACTIVE')
+        event['ProjectName'], event['TriggeredAt'], 'ACTIVE')
 
     # Delete resources
     for forecast_arn in target_forecast_arns:
@@ -89,9 +82,9 @@ def lambda_handler(event, _):
     # When the resource is in DELETE_PENDING or DELETE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
     deleting_forecast_arns = \
-        list_target_forecast_arns(event['ProjectName'], event['CurrentDate'], 'DELETE_PENDING') + \
+        list_target_forecast_arns(event['ProjectName'], event['TriggeredAt'], 'DELETE_PENDING') + \
         list_target_forecast_arns(
-            event['ProjectName'], event['CurrentDate'], 'DELETE_IN_PROGRESS')
+            event['ProjectName'], event['TriggeredAt'], 'DELETE_IN_PROGRESS')
     if len(deleting_forecast_arns) != 0:
         logger.info({
             'message': 'these resources are deleting.',

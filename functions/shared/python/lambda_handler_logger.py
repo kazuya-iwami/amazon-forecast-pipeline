@@ -6,7 +6,6 @@ import boto3
 def lambda_handler_logger(logger, lambda_name):
     """
     Setup logger for lambda handler.
-    - initialize
     - setup logger
     - convert exception logs to JSON
     - add start and end log messages
@@ -14,20 +13,20 @@ def lambda_handler_logger(logger, lambda_name):
     def decorator(func):
         def wrapper(event, context):
             try:
-                if 'ProjectName' not in event:
+                if 'TraceId' not in event:
                     # This is the first lambda_handler() in a state macine flow.
                     # Initialize params
+                    # Replace hyphen of stack_name to underscore because some resource names do not support hyphen.
                     event['ProjectName'] = environ['STACK_NAME'].replace(
                         '-', '_')
                     event['AccountID'] = boto3.client(
                         'sts').get_caller_identity()['Account']
                     event['Region'] = environ['AWS_REGION']
 
-                    # Replace hyphen of stack_name to underscore because some resource names do not support hyphen.
-                    event['CurrentDate'] = datetime.now().strftime(
+                    event['TriggeredAt'] = datetime.now().strftime(
                         "%Y_%m_%d_%H_%M_%S")
                     event['TraceId'] = event['StateMachineName'] + \
-                        '_' + event['CurrentDate']
+                        '_' + event['TriggeredAt']
 
                 # Setup logger
                 logger.structure_logs(
@@ -49,7 +48,7 @@ def lambda_handler_logger(logger, lambda_name):
                     })
                 else:
                     logger.exception({
-                        'message': 'unexpected exception found: ' + repr(e)
+                        'message': 'an exception found: ' + repr(e)
                     })
 
                 raise e

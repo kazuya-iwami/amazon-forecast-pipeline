@@ -22,7 +22,21 @@
                         "0.50"
                     ]
                 },
-                "TimestampFormat": "yyyy-MM-dd hh:mm:ss",
+                "DatasetTimestampFormat": "yyyy-MM-dd hh:mm:ss",
+                "DatasetImportJobs": [
+                    {
+                        "DatasetType": "TARGET_TIME_SERIES",
+                        "Filename": "target_time_series.csv"
+                    },
+                    {
+                        "DatasetType": "RELATED_TIME_SERIES",
+                        "Filename": "related_time_series.csv"
+                    },
+                    {
+                        "DatasetType": "ITEM_METADATA",
+                        "Filename": "metadata.csv"
+                    }
+                ],
                 "Datasets": [
                     {
                         "Domain": "CUSTOM",
@@ -40,6 +54,44 @@
                                 },
                                 {
                                     "AttributeName": "item_id",
+                                    "AttributeType": "string"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "Domain": "CUSTOM",
+                        "DatasetType": "RELATED_TIME_SERIES",
+                        "DataFrequency": "H",
+                        "Schema": {
+                            "Attributes": [
+                                {
+                                    "AttributeName": "timestamp",
+                                    "AttributeType": "timestamp"
+                                },
+                                {
+                                    "AttributeName": "price",
+                                    "AttributeType": "float"
+                                },
+                                {
+                                    "AttributeName": "item_id",
+                                    "AttributeType": "string"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "Domain": "CUSTOM",
+                        "DatasetType": "ITEM_METADATA",
+                        "DataFrequency": "H",
+                        "Schema": {
+                            "Attributes": [
+                                {
+                                    "AttributeName": "item_id",
+                                    "AttributeType": "string"
+                                },
+                                {
+                                    "AttributeName": "location",
                                     "AttributeType": "string"
                                 }
                             ]
@@ -184,6 +236,34 @@
                     "IntervalSeconds": 10,
                     "MaxAttempts": 5,
                     "BackoffRate": 2
+                }
+            ],
+            "Next": "DeleteOutdatedDatasets"
+        },
+        "DeleteOutdatedDatasets": {
+            "Type": "Task",
+            "Resource": "${DeleteOutdatedDatasetsArn}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Next": "DeleteOutdatedDatasetGroups"
+        },
+        "DeleteOutdatedDatasetGroups": {
+            "Type": "Task",
+            "Resource": "${DeleteOutdatedDatasetGroups}",
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
                 }
             ],
             "Next": "Done"
