@@ -58,7 +58,7 @@ def lambda_handler(event, _):
     Lambda function handler
     """
     target_forecast_arns = get_deletion_target_forecast_arns(
-        event['ProjectName'], ['ACTIVE'])
+        event['ProjectName'], ['ACTIVE', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED'])
 
     # Delete resources
     for forecast_arn in target_forecast_arns:

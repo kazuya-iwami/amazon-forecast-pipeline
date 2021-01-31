@@ -142,7 +142,7 @@ def lambda_handler(event, _):
     Lambda function handler
     """
     deletion_target_dataset_import_job_arns = get_deletion_target_dataset_import_job_arns(
-        event['ProjectName'], ['ACTIVE'])
+        event['ProjectName'], ['ACTIVE', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED'])
 
     # Delete resources
     for import_job_arn in deletion_target_dataset_import_job_arns:

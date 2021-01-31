@@ -95,7 +95,7 @@ def lambda_handler(event, _):
     Lambda function handler
     """
     deletion_target_predictor_arns = get_deletion_target_predictor_arns(
-        event['ProjectName'], ['ACTIVE'])
+        event['ProjectName'], ['ACTIVE', 'CREATE_FAILED', 'DELETE_FAILED', 'UPDATE_FAILED'])
 
     # Delete resources
     for predictor_arn in deletion_target_predictor_arns:
