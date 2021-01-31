@@ -8,7 +8,7 @@ import boto3
 from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
-DATASET_GROUP_PATTERN = r'^arn:aws:forecast:.+?:.+?:dataset-group\/(.+?)_([0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2})'
+DATASET_GROUP_PATTERN = r'^arn:aws:forecast:.+?:.+?:dataset-group\/(.+?)_([0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2})/'
 
 logger = Logger()
 forecast_client = boto3.client('forecast')
@@ -17,7 +17,7 @@ compiled_dataset_group_pattern = re.compile(DATASET_GROUP_PATTERN)
 
 def get_deletion_target_dataset_group_arns(project_name):
     """
-    Get dataset group ARNs which should be deleted. The dataset groups except for the latest two are target.
+    Get dataset group ARNs which should be deleted. The dataset groups except for the latest two are eligible for deletion.
     """
     # Get all dataset grousps
     paginator = forecast_client.get_paginator('list_dataset_groups')
@@ -55,7 +55,7 @@ def get_deletion_target_dataset_group_arns(project_name):
 
 def get_deletion_target_dataset_arns(project_name):
     """
-    Get dataset ARNs which should be deleted. The datasets that associated to deletion target dataset groups are target.
+    Get dataset ARNs which should be deleted. The datasets associated to deletion target dataset groups are eligible for deletion.
     """
     deletion_target_dataset_arns = []
 
@@ -101,7 +101,6 @@ def lambda_handler(event, _):
 
     logger.info({
         'message': 'datasets deleted',
-        'deletion_target_dataset_arns': deletion_target_dataset_arns
     })
 
     return event

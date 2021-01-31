@@ -17,9 +17,10 @@ compiled_dataset_group_pattern = re.compile(DATASET_GROUP_PATTERN)
 
 def get_deletion_target_dataset_group_arns(project_name):
     """
-    Get dataset group ARNs which should be deleted. The dataset groups except for the latest two are target.
+    Get dataset group ARNs which should be deleted. The dataset groups except for the latest two are eligible for deletion.
     """
-    # Get all dataset grousps
+    # Get all dataset groups
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/forecast.html#ForecastService.Paginator.ListDatasetGroups
     paginator = forecast_client.get_paginator('list_dataset_groups')
     dataset_group_arns = []
     for page in paginator.paginate():
@@ -79,7 +80,6 @@ def lambda_handler(event, _):
 
     logger.info({
         'message': 'datasets deleted',
-        'deletion_target_dataset_group_arns': deletion_target_dataset_group_arns
     })
 
     return event

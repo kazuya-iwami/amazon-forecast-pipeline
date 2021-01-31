@@ -40,7 +40,7 @@ def list_target_export_job_arns(project_name, status):
     for job_arn in export_job_arns:
         result = compiled_pattern.match(job_arn)
         if result:
-            # Check if the export-job is associated to the target project.
+            # Check if the export job is associated to the target project.
             retrieved_project_name = result.group(1)
             if retrieved_project_name == project_name:
                 target_export_job_arns.append(job_arn)

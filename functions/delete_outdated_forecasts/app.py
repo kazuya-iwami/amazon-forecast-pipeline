@@ -2,7 +2,6 @@
 Delete outdated forecasts
 """
 import re
-import datetime
 import boto3
 # From Lambda Layers
 import actions  # pylint: disable=import-error

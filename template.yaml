@@ -18,6 +18,7 @@ Globals:
         LOG_LEVEL: INFO
         POWERTOOLS_LOGGER_LOG_EVENT: true
         POWERTOOLS_SERVICE_NAME: !Ref AWS::StackName
+        STACK_NAME: !Ref AWS::StackName
 
 # Define some constants which can be used across entire cloudformation stack
 Mappings:
@@ -179,15 +180,26 @@ Resources:
         ApplicationId: arn:aws:serverlessrepo:eu-west-1:057560766410:applications/aws-lambda-powertools-python-layer
         SemanticVersion: 1.4.0
 
+  InitUpdateModelFlow:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Initialize update-model flow"
+      CodeUri: functions/init_update_model_flow/
+      Role: !GetAtt ForecastPipelineRoleForLambda.Arn
+
+  InitUpdateForecastFlow:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: "Initialize forecast-model flow"
+      CodeUri: functions/init_update_forecast_flow/
+      Role: !GetAtt ForecastPipelineRoleForLambda.Arn
+
   CreateDataset:
     Type: AWS::Serverless::Function
     Properties:
       Description: "Create an Amazon Forecast dataset. The information about the dataset that you provide helps AWS Forecast understand how to consume the data for model training."
       CodeUri: functions/create_dataset/
       Role: !GetAtt ForecastPipelineRoleForLambda.Arn
-      Environment:
-        Variables:
-          STACK_NAME: !Ref AWS::StackName
 
   CreateDatasetGroup:
     Type: AWS::Serverless::Function
@@ -287,6 +299,7 @@ Resources:
       Role: !GetAtt UpdateModelStateMachineIAMRole.Arn
       DefinitionUri: statemachine/update_model.asl.json
       DefinitionSubstitutions:
+        InitUpdateModelFlowArn: !GetAtt InitUpdateModelFlow.Arn
         CreateDatasetArn: !GetAtt CreateDataset.Arn
         CreateDatasetGroupArn: !GetAtt CreateDatasetGroup.Arn
         CreateDatasetImportJobArn: !GetAtt CreateDatasetImportJob.Arn
@@ -319,16 +332,15 @@ Resources:
                 Action:
                   - "lambda:InvokeFunction"
                 Resource:
+                  - !GetAtt InitUpdateModelFlow.Arn
                   - !GetAtt CreateDataset.Arn
                   - !GetAtt CreateDatasetGroup.Arn
                   - !GetAtt CreateDatasetImportJob.Arn
                   - !GetAtt CreatePredictor.Arn
-                  - !GetAtt CreateForecast.Arn
-                  - !GetAtt CreateForecastExportJob.Arn
-                  - !GetAtt DeleteOutdatedForecastExportJobs.Arn
-                  - !GetAtt DeleteOutdatedForecasts.Arn
                   - !GetAtt DeleteOutdatedPredictors.Arn
                   - !GetAtt DeleteOutdatedDatasetImportJobs.Arn
+                  - !GetAtt DeleteOutdatedDatasets.Arn
+                  - !GetAtt DeleteOutdatedDatasetGroups.Arn
 
   # Cloudwatch Event Rule to trigger UpdateModelStateMachine periodically(low frequency)
   UpdateModelStateMachineScheduledEventRule:
@@ -377,16 +389,12 @@ Resources:
       Role: !GetAtt UpdateForecastStateMachineIAMRole.Arn
       DefinitionUri: statemachine/update_forecast.asl.json
       DefinitionSubstitutions:
-        CreateDatasetArn: !GetAtt CreateDataset.Arn
-        CreateDatasetGroupArn: !GetAtt CreateDatasetGroup.Arn
+        InitUpdateForecastFlowArn: !GetAtt InitUpdateForecastFlow.Arn
         CreateDatasetImportJobArn: !GetAtt CreateDatasetImportJob.Arn
-        CreatePredictorArn: !GetAtt CreatePredictor.Arn
         CreateForecastArn: !GetAtt CreateForecast.Arn
         CreateForecastExportJobArn: !GetAtt CreateForecastExportJob.Arn
         DeleteOutdatedForecastExportJobsArn: !GetAtt DeleteOutdatedForecastExportJobs.Arn
         DeleteOutdatedForecastsArn: !GetAtt DeleteOutdatedForecasts.Arn
-        DeleteOutdatedPredictorsArn: !GetAtt DeleteOutdatedPredictors.Arn
-        DeleteOutdatedDatasetImportJobsArn: !GetAtt DeleteOutdatedDatasetImportJobs.Arn
 
   # IAM Role used by UpdateForecastStateMachine to trigger Lambda functions
   UpdateForecastStateMachineIAMRole:
@@ -411,16 +419,12 @@ Resources:
                 Action:
                   - "lambda:InvokeFunction"
                 Resource:
-                  - !GetAtt CreateDataset.Arn
-                  - !GetAtt CreateDatasetGroup.Arn
+                  - !GetAtt InitUpdateForecastFlow.Arn
                   - !GetAtt CreateDatasetImportJob.Arn
-                  - !GetAtt CreatePredictor.Arn
                   - !GetAtt CreateForecast.Arn
                   - !GetAtt CreateForecastExportJob.Arn
                   - !GetAtt DeleteOutdatedForecastExportJobs.Arn
                   - !GetAtt DeleteOutdatedForecasts.Arn
-                  - !GetAtt DeleteOutdatedPredictors.Arn
-                  - !GetAtt DeleteOutdatedDatasetImportJobs.Arn
 
   # Cloudwatch Event Rule to trigger UpdateForecastStateMachine periodically(low frequency)
   UpdateForecastStateMachineScheduledEventRule:

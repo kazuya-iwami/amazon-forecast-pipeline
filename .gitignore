@@ -250,3 +250,4 @@ tests/
 .vscode/
 test.py
 dev
+deploy.sh

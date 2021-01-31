@@ -8,7 +8,7 @@ import actions  # pylint: disable=import-error
 from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
-IMPORT_JOB_NAME = '{date}'
+IMPORT_JOB_NAME = 'job_{date}'
 IMPORT_JOB_ARN = 'arn:aws:forecast:{region}:{account}:dataset-import-job/{dataset_name}' \
     '/{import_job_name}'
 
@@ -24,8 +24,9 @@ def lambda_handler(event, _):
 
     import_job_arns = []
 
-    # In this sample, create dataset import job sequentially because default limit of 'Maximum parallel running CreateDatasetImportJob tasks' is small. You should increase this limit to create dataset import job in parallel.
+    # In this sample, creating dataset import job sequentially because default limit of 'Maximum parallel running CreateDatasetImportJob tasks' is small. You should increase this limit to create dataset import job in parallel.
     # https://docs.aws.amazon.com/forecast/latest/dg/limits.html
+
     for dataset in event['Datasets']:
         dataset_name = dataset['DatasetName']
         dataset_arn = dataset['DatasetArn']

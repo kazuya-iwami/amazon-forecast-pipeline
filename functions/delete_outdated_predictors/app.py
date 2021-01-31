@@ -9,73 +9,85 @@ import actions  # pylint: disable=import-error
 from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
-PATTERN = r'^arn:aws:forecast:.+?:.+?:predictor\/(.+?)_([0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2})'
+DATASET_GROUP_PATTERN = r'^arn:aws:forecast:.+?:.+?:dataset-group\/(.+?)_([0-9]{4}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2}_[0-9]{2})'
 
 logger = Logger()
 forecast_client = boto3.client('forecast')
-compiled_pattern = re.compile(PATTERN)
+compiled_dataset_group_pattern = re.compile(DATASET_GROUP_PATTERN)
 
 
-def list_predictor_arns(project_name, status):
+def get_deletion_target_dataset_group_arns(project_name):
     """
-    List predictor ARNs.
+    Get dataset group ARNs which should be deleted. The dataset groups except for the latest two are eligible for deletion.
     """
-    response = forecast_client.list_predictors(
-        Filters=[
-            {
-                'Key': 'Status',
-                'Value': status,
-                'Condition': 'IS'
-            },
-        ]
-    )
-    logger.info({
-        'message': 'forecast_client.list_predictors called',
-        'response': response,
-    })
+    # Get all dataset groups
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/forecast.html#ForecastService.Paginator.ListDatasetGroups
+    paginator = forecast_client.get_paginator('list_dataset_groups')
+    dataset_group_arns = []
+    for page in paginator.paginate():
+        dataset_group_arns.extend([item['DatasetGroupArn']
+                                   for item in page['DatasetGroups']])
 
-    predictor_arns = [predictor['PredictorArn']
-                      for predictor in response['Predictors']]
-    target_candidates = []
+    candidate_dataset_groups = []
 
-    # List up predictors associated to the target project.
-    for predictor_arn in predictor_arns:
-        result = compiled_pattern.match(predictor_arn)
+    for dataset_group_arn in dataset_group_arns:
+        result = compiled_dataset_group_pattern.match(dataset_group_arn)
         if result:
-            # Check if the forecast is associated to the target project.
             retrieved_project_name = result.group(1)
             if retrieved_project_name == project_name:
                 dt = datetime.datetime.strptime(
                     result.group(2), '%Y_%m_%d_%H_%M_%S')
-                target_candidates.append({'arn': predictor_arn, 'dt': dt})
-    logger.info({
-        'message': 'list_predictor_arns() completed',
-        'project_name': project_name,
-        'status': status,
-        'result': target_candidates,
-    })
-    return target_candidates
+                candidate_dataset_groups.append(
+                    {'arn': dataset_group_arn, 'dt': dt})
 
+    candidate_dataset_groups = sorted(
+        candidate_dataset_groups, key=lambda x: x['dt'])
 
-def list_deletion_target_predictor_arns(project_name):
-    """
-    List deletion target predictors, which are Active predictors except for the latest two
-    """
-    target_candidates = list_predictor_arns(project_name, 'ACTIVE')
-
-    # Ingore the latest two predictors
-    # because some existing forecasts may be associated to the previous predictor.
-    sorted_target_candidates = sorted(target_candidates, key=lambda x: x['dt'])
-    target_predictor_arns = [predictor['arn']
-                             for predictor in sorted_target_candidates[:-2]]
+    deletion_target_dataset_group_arns = [dataset_group['arn']
+                                          for dataset_group in candidate_dataset_groups[:-2]]
 
     logger.info({
-        'message': 'list_deletion_target_predictor_arns() completed',
+        'message': 'get_deletion_target_dataset_group_arns() completed',
         'project_name': project_name,
-        'result': target_predictor_arns,
-        'sorted_target_candidates': sorted_target_candidates,
+        'result': deletion_target_dataset_group_arns
     })
-    return target_predictor_arns
+
+    return deletion_target_dataset_group_arns
+
+
+def get_deletion_target_predictor_arns(project_name, status_list):
+    """
+    Get predictor ARNs which should be deleted. The predictors associated to deletion target dataset groups are eligible for deletion.
+    """
+    deletion_target_predictor_arns = []
+    # Get deletion target dataset groups
+    dataset_group_arns = get_deletion_target_dataset_group_arns(project_name)
+
+    # Get all predictors
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/forecast.html#ForecastService.Client.list_predictors
+    paginator = forecast_client.get_paginator('list_predictors')
+    filters = []
+    for status in status_list:
+        filters.append(
+            {
+                'Key': 'Status',
+                'Value': status,
+                'Condition': 'IS'
+            }
+        )
+    for page in paginator.paginate(Filters=filters):
+        for item in page['Predictors']:
+            if item['DatasetGroupArn'] in dataset_group_arns:
+                # This predircor is deletion target
+                deletion_target_predictor_arns.append(item['PredictorArn'])
+
+    logger.info({
+        'message': 'get_deletion_target_predictor_arns() completed',
+        'project_name': project_name,
+        'status_list': status_list,
+        'result': deletion_target_predictor_arns
+    })
+    return deletion_target_predictor_arns
 
 
 @lambda_handler_logger(logger=logger, lambda_name='delete_outdated_predictors')
@@ -83,36 +95,38 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    # List deletion target predictors, which is Active predoctors except for the latest two.
-    target_predictor_arns = list_deletion_target_predictor_arns(
-        event['ProjectName'])
+    deletion_target_predictor_arns = get_deletion_target_predictor_arns(
+        event['ProjectName'], ['ACTIVE'])
 
     # Delete resources
-    for predictor_arn in target_predictor_arns:
+    for predictor_arn in deletion_target_predictor_arns:
         try:
             response = forecast_client.delete_predictor(
                 PredictorArn=predictor_arn
             )
             logger.info({
                 'message': 'forecast_client.delete_predictor called',
-                'response': response
+                'response': response,
+                'predictor_arn': predictor_arn
             })
         except forecast_client.exceptions.ResourceNotFoundException:
             logger.warn({
-                'message': 'Predictor has already been deleted',
+                'message': 'predictor has already been deleted',
                 'predictor_arn': predictor_arn
             })
 
     # When the resource is in DELETE_PENDING or DELETE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
-    deleting_predictor_arns = \
-        list_predictor_arns(event['ProjectName'], 'DELETE_PENDING') + \
-        list_predictor_arns(event['ProjectName'], 'DELETE_IN_PROGRESS')
-    if len(deleting_predictor_arns) != 0:
+    deleting_predictors = get_deletion_target_predictor_arns(
+        event['ProjectName'], ['DELETE_PENDING', 'DELETE_IN_PROGRESS'])
+    if len(deleting_predictors) > 0:
         logger.info({
-            'message': 'these resources are deleting.',
-            'deleting_predictor_arns': deleting_predictor_arns
+            'message': 'some resources are deleting.',
+            'deleting_predictors': deleting_predictors
         })
-        raise actions.ResourcePending
+        raise "actions.ResourcePending"
 
+    logger.info({
+        'message': 'predictors deleted',
+    })
     return event

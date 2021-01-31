@@ -1,103 +1,12 @@
 {
     "Comment": "The workflow for creating and updating the Forecast Prediction Model",
-    "StartAt": "CreateNewDataset",
+    "StartAt": "InitUpdateForecastFlow",
     "States": {
-        "CreateNewDataset": {
+        "InitUpdateForecastFlow": {
             "Type": "Task",
-            "Resource": "${CreateDatasetArn}",
+            "Resource": "${InitUpdateForecastFlowArn}",
             "Parameters": {
-                "StateMachineName": "update-forecast",
-                "DatasetGroup": {
-                    "Domain": "CUSTOM"
-                },
-                "Predictor": {
-                    "ForecastHorizon": 2,
-                    "FeaturizationConfig": {
-                        "ForecastFrequency": "H"
-                    },
-                    "PerformAutoML": true
-                },
-                "Forecast": {
-                    "ForecastTypes": [
-                        "0.50"
-                    ]
-                },
-                "DatasetTimestampFormat": "yyyy-MM-dd hh:mm:ss",
-                "DatasetImportJobs": [
-                    {
-                        "DatasetType": "TARGET_TIME_SERIES",
-                        "Filename": "target_time_series.csv"
-                    },
-                    {
-                        "DatasetType": "RELATED_TIME_SERIES",
-                        "Filename": "related_time_series.csv"
-                    },
-                    {
-                        "DatasetType": "ITEM_METADATA",
-                        "Filename": "metadata.csv"
-                    }
-                ],
-                "Datasets": [
-                    {
-                        "Domain": "CUSTOM",
-                        "DatasetType": "TARGET_TIME_SERIES",
-                        "DataFrequency": "H",
-                        "Schema": {
-                            "Attributes": [
-                                {
-                                    "AttributeName": "timestamp",
-                                    "AttributeType": "timestamp"
-                                },
-                                {
-                                    "AttributeName": "target_value",
-                                    "AttributeType": "float"
-                                },
-                                {
-                                    "AttributeName": "item_id",
-                                    "AttributeType": "string"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "Domain": "CUSTOM",
-                        "DatasetType": "RELATED_TIME_SERIES",
-                        "DataFrequency": "H",
-                        "Schema": {
-                            "Attributes": [
-                                {
-                                    "AttributeName": "timestamp",
-                                    "AttributeType": "timestamp"
-                                },
-                                {
-                                    "AttributeName": "price",
-                                    "AttributeType": "float"
-                                },
-                                {
-                                    "AttributeName": "item_id",
-                                    "AttributeType": "string"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "Domain": "CUSTOM",
-                        "DatasetType": "ITEM_METADATA",
-                        "DataFrequency": "H",
-                        "Schema": {
-                            "Attributes": [
-                                {
-                                    "AttributeName": "item_id",
-                                    "AttributeType": "string"
-                                },
-                                {
-                                    "AttributeName": "location",
-                                    "AttributeType": "string"
-                                }
-                            ]
-                        }
-                    }
-                ]
+                "StateMachineName": "update-forecast"
             },
             "Catch": [
                 {
@@ -106,40 +15,6 @@
                     ],
                     "ResultPath": "$.serviceError",
                     "Next": "Failure"
-                }
-            ],
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "ResourcePending"
-                    ],
-                    "IntervalSeconds": 10,
-                    "MaxAttempts": 15,
-                    "BackoffRate": 1.5
-                }
-            ],
-            "Next": "CreateNewDatasetGroup"
-        },
-        "CreateNewDatasetGroup": {
-            "Type": "Task",
-            "Resource": "${CreateDatasetGroupArn}",
-            "Catch": [
-                {
-                    "ErrorEquals": [
-                        "States.ALL"
-                    ],
-                    "ResultPath": "$.serviceError",
-                    "Next": "Failure"
-                }
-            ],
-            "Retry": [
-                {
-                    "ErrorEquals": [
-                        "ResourcePending"
-                    ],
-                    "IntervalSeconds": 10,
-                    "MaxAttempts": 5,
-                    "BackoffRate": 2
                 }
             ],
             "Next": "CreateNewDatasetImportJob"

@@ -1,104 +1,27 @@
 {
     "Comment": "The workflow for creating and updating the Forecast Prediction Model",
-    "StartAt": "CreateNewDataset",
+    "StartAt": "InitUpdateModelFlow",
     "States": {
+        "InitUpdateModelFlow": {
+            "Type": "Task",
+            "Resource": "${InitUpdateModelFlowArn}",
+            "Parameters": {
+                "StateMachineName": "update-model"
+            },
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.serviceError",
+                    "Next": "Failure"
+                }
+            ],
+            "Next": "CreateNewDataset"
+        },
         "CreateNewDataset": {
             "Type": "Task",
             "Resource": "${CreateDatasetArn}",
-            "Parameters": {
-                "StateMachineName": "update-model",
-                "DatasetGroup": {
-                    "Domain": "CUSTOM"
-                },
-                "Predictor": {
-                    "ForecastHorizon": 2,
-                    "FeaturizationConfig": {
-                        "ForecastFrequency": "H"
-                    },
-                    "PerformAutoML": true
-                },
-                "Forecast": {
-                    "ForecastTypes": [
-                        "0.50"
-                    ]
-                },
-                "DatasetTimestampFormat": "yyyy-MM-dd hh:mm:ss",
-                "DatasetImportJobs": [
-                    {
-                        "DatasetType": "TARGET_TIME_SERIES",
-                        "Filename": "target_time_series.csv"
-                    },
-                    {
-                        "DatasetType": "RELATED_TIME_SERIES",
-                        "Filename": "related_time_series.csv"
-                    },
-                    {
-                        "DatasetType": "ITEM_METADATA",
-                        "Filename": "metadata.csv"
-                    }
-                ],
-                "Datasets": [
-                    {
-                        "Domain": "CUSTOM",
-                        "DatasetType": "TARGET_TIME_SERIES",
-                        "DataFrequency": "H",
-                        "Schema": {
-                            "Attributes": [
-                                {
-                                    "AttributeName": "timestamp",
-                                    "AttributeType": "timestamp"
-                                },
-                                {
-                                    "AttributeName": "target_value",
-                                    "AttributeType": "float"
-                                },
-                                {
-                                    "AttributeName": "item_id",
-                                    "AttributeType": "string"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "Domain": "CUSTOM",
-                        "DatasetType": "RELATED_TIME_SERIES",
-                        "DataFrequency": "H",
-                        "Schema": {
-                            "Attributes": [
-                                {
-                                    "AttributeName": "timestamp",
-                                    "AttributeType": "timestamp"
-                                },
-                                {
-                                    "AttributeName": "price",
-                                    "AttributeType": "float"
-                                },
-                                {
-                                    "AttributeName": "item_id",
-                                    "AttributeType": "string"
-                                }
-                            ]
-                        }
-                    },
-                    {
-                        "Domain": "CUSTOM",
-                        "DatasetType": "ITEM_METADATA",
-                        "DataFrequency": "H",
-                        "Schema": {
-                            "Attributes": [
-                                {
-                                    "AttributeName": "item_id",
-                                    "AttributeType": "string"
-                                },
-                                {
-                                    "AttributeName": "location",
-                                    "AttributeType": "string"
-                                }
-                            ]
-                        }
-                    }
-                ]
-            },
             "Catch": [
                 {
                     "ErrorEquals": [
@@ -256,7 +179,7 @@
         },
         "DeleteOutdatedDatasetGroups": {
             "Type": "Task",
-            "Resource": "${DeleteOutdatedDatasetGroups}",
+            "Resource": "${DeleteOutdatedDatasetGroupsArn}",
             "Catch": [
                 {
                     "ErrorEquals": [
