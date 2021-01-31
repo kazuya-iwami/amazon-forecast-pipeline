@@ -31,6 +31,8 @@ Parameters:
   # please specify your own bucket name which contains training data.
   S3BucketName:
     Type: String
+  EmailAddress:
+    Type: String
 
 Resources:
   # Shared Infrastructures
@@ -288,6 +290,13 @@ Resources:
       CodeUri: functions/delete_outdated_dataset_groups/
       Role: !GetAtt ForecastPipelineRoleForLambda.Arn
 
+  NotifyFailureSNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref EmailAddress
+          Protocol: email
+
   # --------------- StateMachine (Step Fucntion + IAM Role + CloudWatch Events ---------------
   # -- Update Model --
 
@@ -308,6 +317,7 @@ Resources:
         DeleteOutdatedDatasetImportJobsArn: !GetAtt DeleteOutdatedDatasetImportJobs.Arn
         DeleteOutdatedDatasetsArn: !GetAtt DeleteOutdatedDatasets.Arn
         DeleteOutdatedDatasetGroupsArn: !GetAtt DeleteOutdatedDatasetGroups.Arn
+        NotifyFailureSNSTopicArn: !Ref NotifyFailureSNSTopic
 
   # IAM Role used by UpdateModelStateMachine to trigger Lambda functions
   UpdateModelStateMachineIAMRole:
@@ -341,6 +351,11 @@ Resources:
                   - !GetAtt DeleteOutdatedDatasetImportJobs.Arn
                   - !GetAtt DeleteOutdatedDatasets.Arn
                   - !GetAtt DeleteOutdatedDatasetGroups.Arn
+              - Effect: "Allow"
+                Action:
+                  - "SNS:Publish"
+                Resource:
+                  - !Ref NotifyFailureSNSTopic
 
   # Cloudwatch Event Rule to trigger UpdateModelStateMachine periodically(low frequency)
   UpdateModelStateMachineScheduledEventRule:
@@ -382,6 +397,7 @@ Resources:
   # -- Update Forecast --
 
   # Step Functions for orchestrating multiple Lambda functions to generate the Forecast predictor(ML model)
+
   UpdateForecastStateMachine:
     Type: AWS::Serverless::StateMachine
     Properties:
@@ -395,6 +411,7 @@ Resources:
         CreateForecastExportJobArn: !GetAtt CreateForecastExportJob.Arn
         DeleteOutdatedForecastExportJobsArn: !GetAtt DeleteOutdatedForecastExportJobs.Arn
         DeleteOutdatedForecastsArn: !GetAtt DeleteOutdatedForecasts.Arn
+        NotifyFailureSNSTopicArn: !Ref NotifyFailureSNSTopic
 
   # IAM Role used by UpdateForecastStateMachine to trigger Lambda functions
   UpdateForecastStateMachineIAMRole:
@@ -425,6 +442,11 @@ Resources:
                   - !GetAtt CreateForecastExportJob.Arn
                   - !GetAtt DeleteOutdatedForecastExportJobs.Arn
                   - !GetAtt DeleteOutdatedForecasts.Arn
+              - Effect: "Allow"
+                Action:
+                  - "SNS:Publish"
+                Resource:
+                  - !Ref NotifyFailureSNSTopic
 
   # Cloudwatch Event Rule to trigger UpdateForecastStateMachine periodically(low frequency)
   UpdateForecastStateMachineScheduledEventRule:

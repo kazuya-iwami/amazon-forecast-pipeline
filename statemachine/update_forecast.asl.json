@@ -14,7 +14,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Next": "CreateNewDatasetImportJob"
@@ -28,7 +28,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -52,7 +52,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -76,7 +76,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -100,7 +100,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -124,7 +124,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -138,6 +138,16 @@
                 }
             ],
             "Next": "Done"
+        },
+        "NotifyFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::sns:publish",
+            "Parameters": {
+                "Subject": "Amazon Forecast Pipeline - UpdateForecastFlow Failed",
+                "Message.$": "$",
+                "TopicArn": "${NotifyNotifyFailureSNSTopicArn}"
+            },
+            "Next": "Failure"
         },
         "Failure": {
             "Type": "Fail"

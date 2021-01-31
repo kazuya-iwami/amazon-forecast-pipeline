@@ -14,7 +14,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Next": "CreateNewDataset"
@@ -28,7 +28,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -52,7 +52,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -76,7 +76,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -100,7 +100,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -124,7 +124,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -148,7 +148,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Retry": [
@@ -172,7 +172,7 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Next": "DeleteOutdatedDatasetGroups"
@@ -186,10 +186,20 @@
                         "States.ALL"
                     ],
                     "ResultPath": "$.serviceError",
-                    "Next": "Failure"
+                    "Next": "NotifyFailure"
                 }
             ],
             "Next": "Done"
+        },
+        "NotifyFailure": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::sns:publish",
+            "Parameters": {
+                "Subject": "Amazon Forecast Pipeline - UpdateModelFlow Failed",
+                "Message.$": "$",
+                "TopicArn": "${NotifyFailureSNSTopicArn}"
+            },
+            "Next": "Failure"
         },
         "Failure": {
             "Type": "Fail"
