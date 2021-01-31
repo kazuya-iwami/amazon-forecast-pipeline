@@ -66,12 +66,17 @@ def get_deletion_target_predictor_arns(project_name, status_list):
     # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/forecast.html#ForecastService.Client.list_predictors
     paginator = forecast_client.get_paginator('list_predictors')
     filters = []
+    status_candidate = ['ACTIVE', 'CREATE_PENDING', 'CREATE_IN_PROGRESS', 'CREATE_FAILED',
+                        'DELETE_PENDING', 'DELETE_IN_PROGRESS', 'DELETE_FAILED',
+                        'UPDATE_PENDING', 'UPDATE_IN_PROGRESS', 'UPDATE_FAILED']
     for status in status_list:
+        status_candidate.remove(status)
+    for status in status_candidate:
         filters.append(
             {
                 'Key': 'Status',
                 'Value': status,
-                'Condition': 'IS'
+                'Condition': 'IS_NOT'
             }
         )
     for page in paginator.paginate(Filters=filters):
