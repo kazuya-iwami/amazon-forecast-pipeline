@@ -1,5 +1,5 @@
 """
-Uploads your training data to an Amazon Forecast dataset.
+Create dataset import jobs that upload data from S3 to Amazon Forecast's datasets.
 """
 from os import environ
 import boto3

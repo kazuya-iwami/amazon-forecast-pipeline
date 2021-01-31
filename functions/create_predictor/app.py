@@ -101,7 +101,7 @@ def lambda_handler(event, _):
         })
 
         response = forecast_client.describe_predictor(
-            PredictorArn=event["PredictorArn"]
+            PredictorArn=predictor_arn
         )
         logger.info({
             'message': 'forecast_client.describe_predictor called',

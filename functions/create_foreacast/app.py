@@ -1,5 +1,5 @@
 """
-Creates a forecast for each item in the target_time_series dataset.
+Creates a forecast
 """
 import boto3
 # From Lambda Layers
@@ -40,7 +40,7 @@ def lambda_handler(event, _):
         })
 
     except forecast_client.exceptions.ResourceNotFoundException:
-        latest_predictor_arn = event['LATEST_PREDICTOR_ARN']
+        latest_predictor_arn = event['LatestPredictorArn']
 
         logger.info({
             'message': 'creating new forecast',

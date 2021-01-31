@@ -81,7 +81,7 @@ def lambda_handler(event, _):
         raise Exception(
             'the latest predictor not found. the 1st execution of update-model statemachine has not been completed yet.')
 
-    event['LATEST_PREDICTOR_ARN'] = latest_predictor_arn
+    event['LatestPredictorArn'] = latest_predictor_arn
 
     # Get datasets associated to the latest predictor (predictor -> dataset import job -> datasets). This is used in create_dataset_import_job Lambda function.
 

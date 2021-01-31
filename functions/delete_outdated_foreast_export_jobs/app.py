@@ -15,42 +15,42 @@ forecast_client = boto3.client('forecast')
 compiled_pattern = re.compile(PATTERN)
 
 
-def list_target_export_job_arns(project_name, status):
+def get_deletion_target_forecast_export_job_arns(project_name, status_list):
     """
     List export job ARNs which should be deleted.
     """
-    response = forecast_client.list_forecast_export_jobs(
-        Filters=[
+    # Get all forecasts
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/forecast.html#ForecastService.Client.list_forecasts
+    deletion_target_forecast_export_job_arns = []
+
+    paginator = forecast_client.get_paginator('list_forecast_export_jobs')
+    filters = []
+    for status in status_list:
+        filters.append(
             {
                 'Key': 'Status',
                 'Value': status,
                 'Condition': 'IS'
-            },
-        ]
-    )
-    logger.info({
-        'message': 'forecast_client.list_forecast_export_jobs called',
-        'response': response
-    })
-    export_job_arns = [job['ForecastExportJobArn']
-                       for job in response['ForecastExportJobs']]
+            }
+        )
+    for page in paginator.paginate(Filters=filters):
+        for item in page['ForecastExportJobs']:
+            forecast_export_job_arn = item['ForecastExportJobArn']
+            result = compiled_pattern.match(forecast_export_job_arn)
+            if result:
+                # Check if the export job is associated to the target project.
+                retrieved_project_name = result.group(1)
+                if retrieved_project_name == project_name:
+                    deletion_target_forecast_export_job_arns.append(
+                        forecast_export_job_arn)
 
-    target_export_job_arns = []
-
-    for job_arn in export_job_arns:
-        result = compiled_pattern.match(job_arn)
-        if result:
-            # Check if the export job is associated to the target project.
-            retrieved_project_name = result.group(1)
-            if retrieved_project_name == project_name:
-                target_export_job_arns.append(job_arn)
     logger.info({
-        'message': 'list_target_export_job_arns() completed',
+        'message': 'get_deletion_target_forecast_export_job_arns() completed',
         'project_name': project_name,
-        'status': status,
-        'result': target_export_job_arns
+        'status_list': status_list,
+        'result': deletion_target_forecast_export_job_arns
     })
-    return target_export_job_arns
+    return deletion_target_forecast_export_job_arns
 
 
 @lambda_handler_logger(logger=logger, lambda_name='delete_outdated_foreast_export_jobs')
@@ -58,8 +58,8 @@ def lambda_handler(event, _):
     """
     Lambda function handler
     """
-    target_export_job_arns = list_target_export_job_arns(
-        event['ProjectName'], 'ACTIVE')
+    target_export_job_arns = get_deletion_target_forecast_export_job_arns(
+        event['ProjectName'], ['ACTIVE'])
 
     # Delete resources
     for job_arn in target_export_job_arns:
@@ -80,14 +80,17 @@ def lambda_handler(event, _):
 
     # When the resource is in DELETE_PENDING or DELETE_IN_PROGRESS,
     # ResourcePending exception will be thrown and this Lambda function will be retried.
-    deleting_export_job_arns = \
-        list_target_export_job_arns(event['ProjectName'], 'DELETE_PENDING') + \
-        list_target_export_job_arns(event['ProjectName'], 'DELETE_IN_PROGRESS')
-    if len(deleting_export_job_arns) != 0:
+    deleting_export_job_arns = get_deletion_target_forecast_export_job_arns(
+        event['ProjectName'], ['DELETE_PENDING', 'DELETE_IN_PROGRESS'])
+
+    if len(deleting_export_job_arns) > 0:
         logger.info({
             'message': 'these resources are deleting.',
             'deleting_export_job_arns': deleting_export_job_arns
         })
         raise actions.ResourcePending
 
+    logger.info({
+        'message': 'forecast export jobs deleted',
+    })
     return event
