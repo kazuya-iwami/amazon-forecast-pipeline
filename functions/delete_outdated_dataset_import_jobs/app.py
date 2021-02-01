@@ -5,6 +5,7 @@ import re
 import datetime
 import boto3
 # From Lambda Layers
+import actions  # pylint: disable=import-error
 from lambda_handler_logger import lambda_handler_logger  # pylint: disable=import-error
 from aws_lambda_powertools import Logger  # pylint: disable=import-error
 
@@ -175,7 +176,7 @@ def lambda_handler(event, _):
             'message': 'some resources are deleting.',
             'deleting_dataset_import_job_arns': deleting_dataset_import_jobs
         })
-        raise "actions.ResourcePending"
+        raise actions.ResourcePending
 
     logger.info({
         'message': 'dataset import jobs deleted',
