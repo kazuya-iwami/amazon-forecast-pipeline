@@ -5,7 +5,7 @@ Description: "ML Pipeline of Amazon Forecast"
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
-    MemorySize: 1024
+    MemorySize: 128
     Runtime: python3.8
     Handler: app.lambda_handler
     Timeout: 180
