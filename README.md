@@ -17,22 +17,29 @@ ML pipeline sample codes with Amazon Forecast
 
 ## Usage
 - Create S3 bucket for storing datasets and results of Amazon Forecast
-- Put dataset files on S3 backet
+- Put dataset files on S3 backet (See `Setting > S3 Bucket`)
 - Edit functions/shared/python/params.json. This is a setting file for Amazon Forecast.
 - ```sam build```
-- ```sam deploy --stack_name forecast-my-dataset --capabilities "CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND" --parameter-overrides S3BucketName='your-s3-bucket-name' ```
+- ```sam deploy --stack-name forecast-pipeline --capabilities CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND --parameter-overrides S3BucketName=<your-s3-bucket-name>, EmailAddress=<your-email-address> ```
 
 ## Setting
 ### S3 bucket
+Sample datasets are stored in `/samples`. You can put the three dataset files to the following S3 path:
 ```
   your-s3-bucket
     /source
         /target_time_series.csv
         /related_time_series.csv (optional)
         /item_metadata.csv (optional)
-    /target
-        /project_name_timestamp_part0.csv (generated)
 ```
+
+Results of forecast are exported to the following S3 path:
+```
+  your-s3-bucket
+    /target
+        /project_name_timestamp_part0.csv
+```
+
 
 ## Note
 - Create one stack per one AWS account to avoid resouce limit of Amazon Forecast.
