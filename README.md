@@ -43,7 +43,7 @@ Results of forecast are exported to the following S3 path:
 
 ## Note
 - Create one stack per one AWS account to avoid resouce limit of Amazon Forecast.
-- For trouble shooting, you can use CloudWatch Logs Insights
+- For trouble shooting, you can use CloudWatch Logs Insights. Select all log groups of Lambda functions associated to the stack: `/aws/lambda/<stack-name>-xxxxxxxxx` Then, select period for scan and issue a query like this: 
 ```
 fields @timestamp, lambda_name, message.message
 | filter service = 'project_name' and trace_id = 'trace_id'
@@ -51,6 +51,9 @@ fields @timestamp, lambda_name, message.message
 | limit 300
 ```
 
+![insights1](https://github.com/kazuya-iwami/amazon-forecast-pipeline/blob/master/docs/images/insights_1.jpg "insights1")
+
+To show only error messages:
 ```
 fields @timestamp, trace_id, lambda_name, message.message
 | filter service = 'project_name' and level = 'ERROR'
@@ -58,3 +61,4 @@ fields @timestamp, trace_id, lambda_name, message.message
 | limit 300
 ```
 
+![insights2](https://github.com/kazuya-iwami/amazon-forecast-pipeline/blob/master/docs/images/insights_2.jpg "insights2")
